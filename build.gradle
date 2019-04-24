@@ -1,0 +1,20 @@
+apply plugin: 'java'
+apply plugin: 'maven'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+group = 'com.github.replaymod'
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.eclipse.jdt:org.eclipse.jdt.core:3.17.0'
+}
+
+jar {
+    baseName 'remap'
+}
