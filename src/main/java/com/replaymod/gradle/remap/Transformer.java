@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -352,11 +353,32 @@ class Transformer {
                     String name = declaringClass.getQualifiedName();
                     if (name.isEmpty()) return true;
                     Mapping mapping = mixinMappings.get(name);
-                    if (mapping == null) {
-                        mapping = map.get(name);
+                    ArrayDeque<ITypeBinding> parentQueue = new ArrayDeque<>();
+                    parentQueue.offer(declaringClass);
+                    while (true) {
+                        if (mapping != null) {
+                            mapped = mapping.methods.get(node.getIdentifier());
+                            if (mapped != null) {
+                                break;
+                            }
+                            mapping = null;
+                        }
+
+                        ITypeBinding superClass = declaringClass.getSuperclass();
+                        if (superClass != null) {
+                            parentQueue.offer(superClass);
+                        }
+                        for (ITypeBinding anInterface : declaringClass.getInterfaces()) {
+                            parentQueue.offer(anInterface);
+                        }
+                        while (mapping == null) {
+                            declaringClass = parentQueue.poll();
+                            if (declaringClass == null) return true;
+                            name = declaringClass.getQualifiedName();
+                            if (name.isEmpty()) continue;
+                            mapping = map.get(name);
+                        }
                     }
-                    if (mapping == null) return true;
-                    mapped = mapping.methods.get(node.getIdentifier());
                 } else if (binding instanceof ITypeBinding) {
                     String name = ((ITypeBinding) binding).getQualifiedName();
                     if (name.isEmpty()) return true;
