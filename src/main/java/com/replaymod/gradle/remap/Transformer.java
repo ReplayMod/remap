@@ -13,7 +13,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -102,9 +104,190 @@ class Transformer {
         }
     }
 
+    private static final String CLASS_MIXIN = "org.spongepowered.asm.mixin.Mixin";
+    private static final String CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor";
+    private static final String CLASS_INJECT = "org.spongepowered.asm.mixin.injection.Inject";
+    private static final String CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect";
+
+    // Note: Supports only Mixins with a single target (ignores others) and only ones specified via class literals
+    private ITypeBinding getMixinTarget(IAnnotationBinding annotation) {
+        for (IMemberValuePairBinding pair : annotation.getDeclaredMemberValuePairs()) {
+            if (pair.getName().equals("value")) {
+                return (ITypeBinding) ((Object[]) pair.getValue())[0];
+            }
+        }
+        return null;
+    }
+
+    private boolean remapAccessors(CompilationUnit cu, Mapping mapping) {
+        AtomicBoolean changed = new AtomicBoolean(false);
+        AST ast = cu.getAST();
+
+        cu.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(MethodDeclaration node) {
+                int annotationIndex = -1;
+                Annotation annotationNode = null;
+                IAnnotationBinding annotation = null;
+                for (int i = 0; i < node.modifiers().size(); i++) {
+                    Object obj = node.modifiers().get(i);
+                    if (!(obj instanceof Annotation)) {
+                        continue;
+                    }
+                    annotationNode = (Annotation) obj;
+                    annotation = annotationNode.resolveAnnotationBinding();
+                    if (annotation != null && annotation.getAnnotationType().getQualifiedName().equals(CLASS_ACCESSOR)) {
+                        annotationIndex = i;
+                        break;
+                    }
+                }
+                if (annotationIndex == -1) return false;
+
+                String targetByName = node.getName().getIdentifier();
+                if (targetByName.startsWith("is")) {
+                    targetByName = targetByName.substring(2);
+                } else if (targetByName.startsWith("get") || targetByName.startsWith("set")) {
+                    targetByName = targetByName.substring(3);
+                } else {
+                    targetByName = null;
+                }
+                if (targetByName != null) {
+                    targetByName = targetByName.substring(0, 1).toLowerCase() + targetByName.substring(1);
+                }
+
+                String target = Arrays.stream(annotation.getDeclaredMemberValuePairs())
+                        .filter(it -> it.getName().equals("value"))
+                        .map(it -> (String) it.getValue())
+                        .findAny()
+                        .orElse(targetByName);
+
+                if (target == null) {
+                    throw new IllegalArgumentException("Cannot determine accessor target for " + node);
+                }
+
+                String mapped = mapping.fields.get(target);
+                if (mapped != null && !mapped.equals(target)) {
+
+                    Annotation newAnnotation;
+
+                    // Update accessor target
+                    if (mapped.equals(targetByName)) {
+                        // Mapped name matches implied target, can just remove the explict target
+                        newAnnotation = ast.newMarkerAnnotation();
+                    } else {
+                        // Mapped name does not match implied target, need to set the target as annotation value
+                        SingleMemberAnnotation singleMemberAnnotation = ast.newSingleMemberAnnotation();
+                        StringLiteral value = ast.newStringLiteral();
+                        value.setLiteralValue(mapped);
+                        singleMemberAnnotation.setValue(value);
+                        newAnnotation = singleMemberAnnotation;
+                    }
+
+                    newAnnotation.setTypeName(ast.newName(annotationNode.getTypeName().getFullyQualifiedName()));
+                    //noinspection unchecked
+                    node.modifiers().set(annotationIndex, newAnnotation);
+
+                    changed.set(true);
+                }
+
+                return false;
+            }
+        });
+
+        return changed.get();
+    }
+
+    private boolean remapInjectsAndRedirects(CompilationUnit cu, Mapping mapping) {
+        AtomicBoolean changed = new AtomicBoolean(false);
+
+        cu.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(MethodDeclaration node) {
+                NormalAnnotation annotationNode = null;
+                for (Object obj : node.modifiers()) {
+                    if (!(obj instanceof NormalAnnotation)) {
+                        continue;
+                    }
+                    annotationNode = (NormalAnnotation) obj;
+                    IAnnotationBinding annotation = annotationNode.resolveAnnotationBinding();
+                    if (annotation != null) {
+                        String qualifiedName = annotation.getAnnotationType().getQualifiedName();
+                        if (qualifiedName.equals(CLASS_INJECT) || qualifiedName.equals(CLASS_REDIRECT)) {
+                            break;
+                        }
+                    }
+                    annotationNode = null;
+                }
+                if (annotationNode == null) return false;
+
+                //noinspection unchecked
+                for (MemberValuePair pair : (List<MemberValuePair>) annotationNode.values()) {
+                    if (!pair.getName().getIdentifier().equals("method")) continue;
+
+                    Object expr = pair.getValue();
+                    // Note: mixin supports multiple targets, we do not (yet)
+                    if (!(expr instanceof StringLiteral)) continue;
+                    StringLiteral methodNode = (StringLiteral) expr;
+                    String method = methodNode.getLiteralValue();
+                    String mapped = mapping.methods.get(method);
+                    if (mapped != null && !mapped.equals(method)) {
+                        methodNode.setLiteralValue(mapped);
+                        changed.set(true);
+                    }
+                }
+
+                return false;
+            }
+        });
+
+        return changed.get();
+    }
+
     private boolean remapClass(CompilationUnit cu) {
         AtomicBoolean changed = new AtomicBoolean(false);
         Map<String, String> mappedImports = new HashMap<>();
+        Map<String, Mapping> mixinMappings = new HashMap<>();
+
+        cu.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(TypeDeclaration node) {
+                ITypeBinding type = node.resolveBinding();
+                if (type == null) return false;
+
+                IAnnotationBinding binding = null;
+                for (Object modifier : node.modifiers()) {
+                    if (modifier instanceof Annotation) {
+                        binding = ((Annotation) modifier).resolveAnnotationBinding();
+                        if (binding != null && !binding.getAnnotationType().getQualifiedName().equals(CLASS_MIXIN)) {
+                            binding = null;
+                        }
+                    }
+                }
+                if (binding == null) return false;
+
+                ITypeBinding target = getMixinTarget(binding);
+                if (target == null) return false;
+
+                Mapping mapping = map.get(target.getQualifiedName());
+                if (mapping == null) return false;
+
+                mixinMappings.put(type.getQualifiedName(), mapping);
+
+                if (!mapping.fields.isEmpty()) {
+                    if (remapAccessors(cu, mapping)) {
+                        changed.set(true);
+                    }
+                }
+                if (!mapping.methods.isEmpty()) {
+                    if (remapInjectsAndRedirects(cu, mapping)) {
+                        changed.set(true);
+                    }
+                }
+
+                return false;
+            }
+        });
+
         cu.accept(new ASTVisitor() {
             @Override
             public boolean visit(ImportDeclaration node) {
@@ -122,7 +305,9 @@ class Transformer {
                 }
                 return false;
             }
+        });
 
+        cu.accept(new ASTVisitor() {
             @Override
             public boolean visit(QualifiedName node) {
                 String name = node.getFullyQualifiedName();
@@ -155,7 +340,10 @@ class Transformer {
                     if (declaringClass == null) return true;
                     String name = declaringClass.getQualifiedName();
                     if (name.isEmpty()) return true;
-                    Mapping mapping = map.get(name);
+                    Mapping mapping = mixinMappings.get(name);
+                    if (mapping == null) {
+                        mapping = map.get(name);
+                    }
                     if (mapping == null) return true;
                     mapped = mapping.fields.get(node.getIdentifier());
                 } else if (binding instanceof IMethodBinding) {
@@ -163,7 +351,10 @@ class Transformer {
                     if (declaringClass == null) return true;
                     String name = declaringClass.getQualifiedName();
                     if (name.isEmpty()) return true;
-                    Mapping mapping = map.get(name);
+                    Mapping mapping = mixinMappings.get(name);
+                    if (mapping == null) {
+                        mapping = map.get(name);
+                    }
                     if (mapping == null) return true;
                     mapped = mapping.methods.get(node.getIdentifier());
                 } else if (binding instanceof ITypeBinding) {
