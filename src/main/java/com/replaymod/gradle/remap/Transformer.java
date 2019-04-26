@@ -360,6 +360,10 @@ class Transformer {
                 } else if (binding instanceof ITypeBinding) {
                     String name = ((ITypeBinding) binding).getQualifiedName();
                     if (name.isEmpty()) return true;
+                    int paramIndex = name.indexOf('<');
+                    if (paramIndex != -1) {
+                        name = name.substring(0, paramIndex);
+                    }
                     Mapping mapping = map.get(name);
                     if (mapping == null) return true;
                     mapped = mapping.newName;
