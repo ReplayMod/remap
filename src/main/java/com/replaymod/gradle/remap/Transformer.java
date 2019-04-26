@@ -13,9 +13,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,7 +28,7 @@ class Transformer {
         if (args[0].isEmpty()) {
             mappings = new HashMap<>();
         } else {
-            mappings = readMappings(Collections.singletonList(new File(args[0])), args[1].equals("true"));
+            mappings = readMappings(new File(args[0]), args[1].equals("true"));
         }
         Transformer transformer = new Transformer(mappings);
 
@@ -205,48 +203,42 @@ class Transformer {
         public Map<String, String> methods = new HashMap<>();
     }
 
-    public static Map<String, Mapping> readMappings(List<File> mappingFiles, boolean invert) throws IOException {
+    public static Map<String, Mapping> readMappings(File mappingFile, boolean invert) throws IOException {
         Map<String, Mapping> mappings = new HashMap<>();
-        for (File mappingFile : mappingFiles) {
-            Map<String, Mapping> currentMappings = new HashMap<>(mappings);
-            int lineNumber = 0;
-            for (String line : Files.readAllLines(mappingFile.toPath(), StandardCharsets.UTF_8)) {
-                lineNumber++;
-                if (line.trim().startsWith("#") || line.trim().isEmpty()) continue;
+        int lineNumber = 0;
+        for (String line : Files.readAllLines(mappingFile.toPath(), StandardCharsets.UTF_8)) {
+            lineNumber++;
+            if (line.trim().startsWith("#") || line.trim().isEmpty()) continue;
 
-                String[] parts = line.split(" ");
-                if (parts.length < 2 || line.contains(";")) {
-                    throw new IllegalArgumentException("Failed to parse line " + lineNumber + " in " + mappingFile.getPath() + ".");
-                }
+            String[] parts = line.split(" ");
+            if (parts.length < 2 || line.contains(";")) {
+                throw new IllegalArgumentException("Failed to parse line " + lineNumber + " in " + mappingFile.getPath() + ".");
+            }
 
-                Mapping mapping = currentMappings.get(parts[0]);
-                if (mapping == null) {
-                    mapping = new Mapping();
-                    mapping.oldName = mapping.newName = parts[0];
-                    currentMappings.put(mapping.oldName, mapping);
-                    mappings.put(mapping.newName, mapping);
-                }
+            Mapping mapping = mappings.get(parts[0]);
+            if (mapping == null) {
+                mapping = new Mapping();
+                mapping.oldName = mapping.newName = parts[0];
+                mappings.put(mapping.oldName, mapping);
+            }
 
-                if (parts.length == 2) {
-                    // Class mapping
-                    mappings.remove(mapping.newName);
-                    mapping.newName = parts[1];
-                    mappings.put(mapping.newName, mapping);
-                } else if (parts[1].endsWith("()")) {
-                    // Method mapping
-                    String name = parts[1].substring(0, parts[1].length() - 2);
-                    String newName = parts[2].substring(0, parts[2].length() - 2);
-                    String oldName = mapping.methods.remove(name);
-                    if (oldName == null) oldName = name;
-                    mapping.methods.put(oldName, newName);
-                } else {
-                    // Field mapping
-                    String name = parts[1];
-                    String newName = parts[2];
-                    String oldName = mapping.fields.remove(name);
-                    if (oldName == null) oldName = name;
-                    mapping.fields.put(oldName, newName);
-                }
+            if (parts.length == 2) {
+                // Class mapping
+                mapping.newName = parts[1];
+            } else if (parts[1].endsWith("()")) {
+                // Method mapping
+                String name = parts[1].substring(0, parts[1].length() - 2);
+                String newName = parts[2].substring(0, parts[2].length() - 2);
+                String oldName = mapping.methods.remove(name);
+                if (oldName == null) oldName = name;
+                mapping.methods.put(oldName, newName);
+            } else {
+                // Field mapping
+                String name = parts[1];
+                String newName = parts[2];
+                String oldName = mapping.fields.remove(name);
+                if (oldName == null) oldName = name;
+                mapping.fields.put(oldName, newName);
             }
         }
         if (invert) {
