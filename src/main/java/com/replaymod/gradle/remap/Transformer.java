@@ -244,6 +244,11 @@ class Transformer {
         return changed.get();
     }
 
+    private static String stripGenerics(String name) {
+        int paramIndex = name.indexOf('<');
+        return paramIndex != -1 ? name.substring(0, paramIndex) : name;
+    }
+
     private boolean remapClass(CompilationUnit cu) {
         AtomicBoolean changed = new AtomicBoolean(false);
         Map<String, String> mappedImports = new HashMap<>();
@@ -339,7 +344,7 @@ class Transformer {
                 if (binding instanceof IVariableBinding) {
                     ITypeBinding declaringClass = ((IVariableBinding) binding).getDeclaringClass();
                     if (declaringClass == null) return true;
-                    String name = declaringClass.getQualifiedName();
+                    String name = stripGenerics(declaringClass.getQualifiedName());
                     if (name.isEmpty()) return true;
                     Mapping mapping = mixinMappings.get(name);
                     if (mapping == null) {
@@ -350,7 +355,7 @@ class Transformer {
                 } else if (binding instanceof IMethodBinding) {
                     ITypeBinding declaringClass = ((IMethodBinding) binding).getDeclaringClass();
                     if (declaringClass == null) return true;
-                    String name = declaringClass.getQualifiedName();
+                    String name = stripGenerics(declaringClass.getQualifiedName());
                     if (name.isEmpty()) return true;
                     Mapping mapping = mixinMappings.get(name);
                     ArrayDeque<ITypeBinding> parentQueue = new ArrayDeque<>();
@@ -374,18 +379,14 @@ class Transformer {
                         while (mapping == null) {
                             declaringClass = parentQueue.poll();
                             if (declaringClass == null) return true;
-                            name = declaringClass.getQualifiedName();
+                            name = stripGenerics(declaringClass.getQualifiedName());
                             if (name.isEmpty()) continue;
                             mapping = map.get(name);
                         }
                     }
                 } else if (binding instanceof ITypeBinding) {
-                    String name = ((ITypeBinding) binding).getQualifiedName();
+                    String name = stripGenerics(((ITypeBinding) binding).getQualifiedName());
                     if (name.isEmpty()) return true;
-                    int paramIndex = name.indexOf('<');
-                    if (paramIndex != -1) {
-                        name = name.substring(0, paramIndex);
-                    }
                     Mapping mapping = map.get(name);
                     if (mapping == null) return true;
                     mapped = mapping.newName;
