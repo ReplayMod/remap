@@ -107,6 +107,7 @@ class Transformer {
 
     private static final String CLASS_MIXIN = "org.spongepowered.asm.mixin.Mixin";
     private static final String CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor";
+    private static final String CLASS_AT = "org.spongepowered.asm.mixin.injection.At";
     private static final String CLASS_INJECT = "org.spongepowered.asm.mixin.injection.Inject";
     private static final String CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect";
 
@@ -244,6 +245,83 @@ class Transformer {
         return changed.get();
     }
 
+    private Mapping remapInternalType(String internalType, StringBuilder result) {
+        if (internalType.charAt(0) == 'L') {
+            String type = internalType.substring(1, internalType.length() - 1).replace('/', '.');
+            Mapping mapping = map.get(type);
+            if (mapping != null) {
+                result.append('L').append(mapping.newName.replace('.', '/')).append(';');
+                return mapping;
+            }
+        }
+        result.append(internalType);
+        return null;
+    }
+
+    private String remapFullyQualifiedMethod(String signature) {
+        int ownerEnd = signature.indexOf(';');
+        int argsBegin = signature.indexOf('(');
+        int argsEnd = signature.indexOf(')');
+        String owner = signature.substring(0, ownerEnd + 1);
+        String method = signature.substring(ownerEnd + 1, argsBegin);
+        String args = signature.substring(argsBegin + 1, argsEnd);
+        String returnType = signature.substring(argsEnd + 1);
+
+        StringBuilder builder = new StringBuilder(signature.length() + 32);
+        Mapping mapping = remapInternalType(owner, builder);
+        String mapped = null;
+        if (mapping != null) {
+            mapped = mapping.methods.get(method);
+        }
+        builder.append(mapped != null ? mapped : method);
+        builder.append('(');
+        for (int i = 0; i < args.length(); i++) {
+            char c = args.charAt(i);
+            if (c != 'L') {
+                builder.append(c);
+                continue;
+            }
+            int end = args.indexOf(';', i);
+            String arg = args.substring(i, end + 1);
+            remapInternalType(arg, builder);
+            i = end;
+        }
+        builder.append(')');
+        remapInternalType(returnType, builder);
+        return builder.toString();
+    }
+
+    private boolean remapAtTargets(CompilationUnit cu) {
+        AtomicBoolean changed = new AtomicBoolean(false);
+
+        cu.accept(new ASTVisitor() {
+            @Override
+            public boolean visit(NormalAnnotation node) {
+                IAnnotationBinding annotation = node.resolveAnnotationBinding();
+                if (annotation == null) return true;
+                String qualifiedName = annotation.getAnnotationType().getQualifiedName();
+                if (!qualifiedName.equals(CLASS_AT)) return true;
+
+                //noinspection unchecked
+                for (MemberValuePair pair : (List<MemberValuePair>) node.values()) {
+                    if (!pair.getName().getIdentifier().equals("target")) continue;
+
+                    StringLiteral value = (StringLiteral) pair.getValue();
+                    String signature = value.getLiteralValue();
+                    String newSignature = remapFullyQualifiedMethod(signature);
+                    if (!newSignature.equals(signature)) {
+                        value.setLiteralValue(newSignature);
+                        changed.set(true);
+                    }
+                }
+
+                return false;
+            }
+        });
+
+        return changed.get();
+    }
+
     private static String stripGenerics(String name) {
         int paramIndex = name.indexOf('<');
         return paramIndex != -1 ? name.substring(0, paramIndex) : name;
@@ -270,6 +348,10 @@ class Transformer {
                     }
                 }
                 if (binding == null) return false;
+
+                if (remapAtTargets(cu)) {
+                    changed.set(true);
+                }
 
                 ITypeBinding target = getMixinTarget(binding);
                 if (target == null) return false;
