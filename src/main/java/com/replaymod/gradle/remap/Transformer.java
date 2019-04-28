@@ -397,6 +397,11 @@ class Transformer {
 
         cu.accept(new ASTVisitor() {
             @Override
+            public boolean visit(ImportDeclaration node) {
+                return false;
+            }
+
+            @Override
             public boolean visit(QualifiedName node) {
                 String name = node.getFullyQualifiedName();
                 Mapping mapping = map.get(name);
