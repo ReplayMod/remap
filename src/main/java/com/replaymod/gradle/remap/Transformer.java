@@ -28,6 +28,7 @@ import java.util.stream.Collectors;
 class Transformer {
     private Map<String, Mapping> map;
     private String[] classpath;
+    private boolean fail;
 
     public static void main(String[] args) throws IOException, BadLocationException {
         Map<String, Mapping> mappings;
@@ -71,6 +72,10 @@ class Transformer {
             for (String line : lines) {
                 System.out.println(line);
             }
+        }
+
+        if (transformer.fail) {
+            System.exit(1);
         }
     }
 
@@ -135,7 +140,7 @@ class Transformer {
                 CompilationUnit cu = entry.getValue();
 
                 cu.recordModifications();
-                if (remapClass(cu)) {
+                if (remapClass(unitName, cu)) {
                     Document document = new Document(sources.get(unitName));
                     TextEdit edit = cu.rewrite(document, JavaCore.getDefaultOptions());
                     edit.apply(document);
@@ -372,7 +377,7 @@ class Transformer {
         return paramIndex != -1 ? name.substring(0, paramIndex) : name;
     }
 
-    private boolean remapClass(CompilationUnit cu) {
+    private boolean remapClass(String unitName, CompilationUnit cu) {
         AtomicBoolean changed = new AtomicBoolean(false);
         Map<String, String> mappedImports = new HashMap<>();
         Map<String, Mapping> mixinMappings = new HashMap<>();
@@ -484,6 +489,19 @@ class Transformer {
                     }
                     if (mapping == null) return true;
                     mapped = mapping.fields.get(node.getIdentifier());
+                    if (mapped != null) {
+                        ASTNode parent = node.getParent();
+                        if (!(parent instanceof FieldAccess // qualified access is fine
+                                || parent instanceof QualifiedName // qualified access is fine
+                                || parent instanceof VariableDeclarationFragment // shadow member declarations are fine
+                                || parent instanceof SwitchCase) // referencing constants in case statements is fine
+                        ) {
+                            System.err.println(unitName + ": Implicit member reference to remapped field \"" + node.getIdentifier() + "\". " +
+                                    "This can cause issues if the remapped reference becomes shadowed by a local variable and is therefore forbidden. " +
+                                    "Use \"this." + node.getIdentifier() + "\" instead.");
+                            fail = true;
+                        }
+                    }
                 } else if (binding instanceof IMethodBinding) {
                     ITypeBinding declaringClass = ((IMethodBinding) binding).getDeclaringClass();
                     if (declaringClass == null) return true;
