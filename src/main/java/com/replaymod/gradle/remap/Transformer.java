@@ -308,35 +308,43 @@ class Transformer {
         return null;
     }
 
-    private String remapFullyQualifiedMethod(String signature) {
+    private String remapFullyQualifiedMethodOrField(String signature) {
         int ownerEnd = signature.indexOf(';');
         int argsBegin = signature.indexOf('(');
         int argsEnd = signature.indexOf(')');
+        boolean method = argsBegin != -1;
+        if (!method) {
+            argsBegin = argsEnd = signature.indexOf(':');
+        }
         String owner = signature.substring(0, ownerEnd + 1);
-        String method = signature.substring(ownerEnd + 1, argsBegin);
-        String args = signature.substring(argsBegin + 1, argsEnd);
+        String name = signature.substring(ownerEnd + 1, argsBegin);
         String returnType = signature.substring(argsEnd + 1);
 
         StringBuilder builder = new StringBuilder(signature.length() + 32);
         Mapping mapping = remapInternalType(owner, builder);
         String mapped = null;
         if (mapping != null) {
-            mapped = mapping.methods.get(method);
+            mapped = (method ? mapping.methods : mapping.fields).get(name);
         }
-        builder.append(mapped != null ? mapped : method);
-        builder.append('(');
-        for (int i = 0; i < args.length(); i++) {
-            char c = args.charAt(i);
-            if (c != 'L') {
-                builder.append(c);
-                continue;
+        builder.append(mapped != null ? mapped : name);
+        if (method) {
+            builder.append('(');
+            String args = signature.substring(argsBegin + 1, argsEnd);
+            for (int i = 0; i < args.length(); i++) {
+                char c = args.charAt(i);
+                if (c != 'L') {
+                    builder.append(c);
+                    continue;
+                }
+                int end = args.indexOf(';', i);
+                String arg = args.substring(i, end + 1);
+                remapInternalType(arg, builder);
+                i = end;
             }
-            int end = args.indexOf(';', i);
-            String arg = args.substring(i, end + 1);
-            remapInternalType(arg, builder);
-            i = end;
+            builder.append(')');
+        } else {
+            builder.append(':');
         }
-        builder.append(')');
         remapInternalType(returnType, builder);
         return builder.toString();
     }
@@ -358,7 +366,7 @@ class Transformer {
 
                     StringLiteral value = (StringLiteral) pair.getValue();
                     String signature = value.getLiteralValue();
-                    String newSignature = remapFullyQualifiedMethod(signature);
+                    String newSignature = remapFullyQualifiedMethodOrField(signature);
                     if (!newSignature.equals(signature)) {
                         value.setLiteralValue(newSignature);
                         changed.set(true);
