@@ -13,8 +13,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayDeque;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +46,7 @@ class Transformer {
         }
         transformer.setClasspath(classpath);
 
+        Map<String, String> sources = new HashMap<>();
         while (true) {
             String name = reader.readLine();
             if (name == null || name.isEmpty()) {
@@ -55,10 +59,14 @@ class Transformer {
             }
             String source = String.join("\n", lines);
 
-            String result = transformer.remap(name, source);
+            sources.put(name, source);
+        }
 
+        Map<String, String> results = transformer.remap(sources);
+
+        for (String name : sources.keySet()) {
             System.out.println(name);
-            lines = result.split("\n");
+            String[] lines = results.get(name).split("\n");
             System.out.println(lines.length);
             for (String line : lines) {
                 System.out.println(line);
@@ -78,30 +86,67 @@ class Transformer {
         this.classpath = classpath;
     }
 
-    public String remap(String unitName, String source) throws BadLocationException {
-        Document document = new Document(source);
+    public Map<String, String> remap(Map<String, String> sources) throws BadLocationException, IOException {
         ASTParser parser = ASTParser.newParser(AST.JLS8);
         Map<String, String> options = JavaCore.getDefaultOptions();
         JavaCore.setComplianceOptions("1.8", options);
         parser.setCompilerOptions(options);
-        parser.setUnitName(unitName);
-        parser.setSource(document.get().toCharArray());
         parser.setEnvironment(classpath, null, null, true);
         parser.setResolveBindings(true);
         parser.setBindingsRecovery(true);
-        CompilationUnit cu = (CompilationUnit) parser.createAST(null);
-        for (IProblem problem : cu.getProblems()) {
-            if (problem.isError()) {
-                System.err.println(unitName + ":" + problem.getSourceLineNumber() + ": " + problem.getMessage());
+
+        Path tmpDir = Files.createTempDirectory("remap");
+        try {
+            Map<String, String> filePathToName = new HashMap<>();
+            String[] compilationUnits = new String[sources.size()];
+            String[] encodings = new String[compilationUnits.length];
+            int i = 0;
+            for (Entry<String, String> entry : sources.entrySet()) {
+                String unitName = entry.getKey();
+                String source = entry.getValue();
+
+                Path path = tmpDir.resolve(unitName);
+                Files.createDirectories(path.getParent());
+                Files.write(path, source.getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE);
+                String filePath = path.toString();
+                filePathToName.put(filePath, unitName);
+                compilationUnits[i] = filePath;
+                encodings[i] = "UTF-8";
+
+                i++;
             }
-        }
-        cu.recordModifications();
-        if (remapClass(cu)) {
-            TextEdit edit = cu.rewrite(document, JavaCore.getDefaultOptions());
-            edit.apply(document);
-            return document.get();
-        } else {
-            return source;
+            Map<String, CompilationUnit> cus = new HashMap<>();
+            parser.createASTs(compilationUnits, encodings, new String[0], new FileASTRequestor() {
+                @Override
+                public void acceptAST(String sourceFilePath, CompilationUnit cu) {
+                    String unitName = filePathToName.get(sourceFilePath);
+                    for (IProblem problem : cu.getProblems()) {
+                        if (problem.isError()) {
+                            System.err.println(unitName + ":" + problem.getSourceLineNumber() + ": " + problem.getMessage());
+                        }
+                    }
+                    cus.put(unitName, cu);
+                }
+            }, null);
+
+            Map<String, String> results = new HashMap<>();
+            for (Entry<String, CompilationUnit> entry : cus.entrySet()) {
+                String unitName = entry.getKey();
+                CompilationUnit cu = entry.getValue();
+
+                cu.recordModifications();
+                if (remapClass(cu)) {
+                    Document document = new Document(sources.get(unitName));
+                    TextEdit edit = cu.rewrite(document, JavaCore.getDefaultOptions());
+                    edit.apply(document);
+                    results.put(unitName, document.get());
+                } else {
+                    results.put(unitName, sources.get(unitName));
+                }
+            }
+            return results;
+        } finally {
+            Files.walk(tmpDir).map(Path::toFile).sorted(Comparator.reverseOrder()).forEach(File::delete);
         }
     }
 
