@@ -471,11 +471,6 @@ class Transformer {
                 return visitName(node.resolveBinding(), node);
             }
 
-            @Override
-            public boolean visit(MethodInvocation node) {
-                return visitName(node.resolveMethodBinding(), node.getName());
-            }
-
             private boolean visitName(IBinding binding, SimpleName node) {
                 String mapped;
                 if (binding instanceof IVariableBinding) {
