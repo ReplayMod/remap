@@ -389,7 +389,6 @@ class Transformer {
 
     private boolean remapClass(String unitName, CompilationUnit cu) {
         AtomicBoolean changed = new AtomicBoolean(false);
-        Map<String, String> mappedImports = new HashMap<>();
         Map<String, Mapping> mixinMappings = new HashMap<>();
 
         cu.accept(new ASTVisitor() {
@@ -445,11 +444,6 @@ class Transformer {
                 if (mapped != null && !mapped.equals(name)) {
                     node.setName(node.getAST().newName(mapped));
                     changed.set(true);
-                    String simpleName = name.substring(name.lastIndexOf('.') + 1);
-                    String simpleMapped = mapped.substring(mapped.lastIndexOf('.') + 1);
-                    if (!simpleName.equals(simpleMapped)) {
-                        mappedImports.put(simpleName, simpleMapped);
-                    }
                 }
                 return false;
             }
@@ -550,7 +544,7 @@ class Transformer {
                     mapped = mapping.newName;
                     mapped = mapped.substring(mapped.lastIndexOf('.') + 1);
                 } else {
-                    mapped = mappedImports.get(node.getIdentifier());
+                    return true;
                 }
 
                 if (mapped != null && !mapped.equals(node.getIdentifier())) {
