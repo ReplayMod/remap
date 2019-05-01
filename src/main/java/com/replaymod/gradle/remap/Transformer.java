@@ -510,11 +510,14 @@ class Transformer {
                 } else if (binding instanceof IMethodBinding) {
                     ITypeBinding declaringClass = ((IMethodBinding) binding).getDeclaringClass();
                     if (declaringClass == null) return true;
-                    String name = stripGenerics(declaringClass.getQualifiedName());
-                    if (name.isEmpty()) return true;
-                    Mapping mapping = mixinMappings.get(name);
                     ArrayDeque<ITypeBinding> parentQueue = new ArrayDeque<>();
                     parentQueue.offer(declaringClass);
+                    Mapping mapping = null;
+
+                    String name = stripGenerics(declaringClass.getQualifiedName());
+                    if (!name.isEmpty()) {
+                        mapping = mixinMappings.get(name);
+                    }
                     while (true) {
                         if (mapping != null) {
                             mapped = mapping.methods.get(node.getIdentifier());
