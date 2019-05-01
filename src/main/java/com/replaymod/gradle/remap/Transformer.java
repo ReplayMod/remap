@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class Transformer {
     private Map<String, Mapping> map;
@@ -576,6 +578,7 @@ class Transformer {
 
     public static Map<String, Mapping> readMappings(File mappingFile, boolean invert) throws IOException {
         Map<String, Mapping> mappings = new HashMap<>();
+        Map<String, Mapping> revMappings = new HashMap<>();
         int lineNumber = 0;
         for (String line : Files.readAllLines(mappingFile.toPath(), StandardCharsets.UTF_8)) {
             lineNumber++;
@@ -596,24 +599,49 @@ class Transformer {
             if (parts.length == 2) {
                 // Class mapping
                 mapping.newName = parts[1];
-            } else if (parts[1].endsWith("()")) {
-                // Method mapping
-                String name = parts[1].substring(0, parts[1].length() - 2);
-                String newName = parts[2].substring(0, parts[2].length() - 2);
-                String oldName = mapping.methods.remove(name);
-                if (oldName == null) oldName = name;
-                mapping.methods.put(oldName, newName);
+                // Possibly merge with reverse mapping
+                Mapping revMapping = revMappings.remove(mapping.newName);
+                if (revMapping != null) {
+                    mapping.fields.putAll(revMapping.fields);
+                    mapping.methods.putAll(revMapping.methods);
+                }
+                revMappings.put(mapping.newName, mapping);
+            } else if (parts.length == 3 || parts.length == 4) {
+                String fromName = parts[1];
+                String toName;
+                Mapping revMapping;
+                if (parts.length == 4) {
+                    toName = parts[3];
+                    revMapping = revMappings.get(parts[2]);
+                    if (revMapping == null) {
+                        revMapping = new Mapping();
+                        revMapping.oldName = revMapping.newName = parts[2];
+                        revMappings.put(revMapping.newName, revMapping);
+                    }
+                } else {
+                    toName = parts[2];
+                    revMapping = mapping;
+                }
+                if (fromName.endsWith("()")) {
+                    // Method mapping
+                    fromName = fromName.substring(0, fromName.length() - 2);
+                    toName = toName.substring(0, toName.length() - 2);
+                    mapping.methods.put(fromName, toName);
+                    revMapping.methods.put(fromName, toName);
+                } else {
+                    // Field mapping
+                    mapping.fields.put(fromName, toName);
+                    revMapping.fields.put(fromName, toName);
+                }
             } else {
-                // Field mapping
-                String name = parts[1];
-                String newName = parts[2];
-                String oldName = mapping.fields.remove(name);
-                if (oldName == null) oldName = name;
-                mapping.fields.put(oldName, newName);
+                throw new IllegalArgumentException("Failed to parse line " + lineNumber + " in " + mappingFile.getPath() + ".");
             }
         }
         if (invert) {
-            mappings.values().forEach(it -> {
+            Stream.concat(
+                    mappings.values().stream(),
+                    revMappings.values().stream()
+            ).distinct().forEach(it -> {
                 String oldName = it.oldName;
                 it.oldName = it.newName;
                 it.newName = oldName;
@@ -621,6 +649,24 @@ class Transformer {
                 it.methods = it.methods.entrySet().stream().collect(Collectors.toMap(Entry::getValue, Entry::getKey));
             });
         }
-        return mappings.entrySet().stream().collect(Collectors.toMap(e -> e.getValue().oldName, Entry::getValue));
+        return Stream.concat(
+                mappings.values().stream(),
+                revMappings.values().stream()
+        ).collect(Collectors.toMap(mapping -> mapping.oldName, Function.identity(), (mapping, other) -> {
+            if (!other.oldName.equals(other.newName)) {
+                if (!mapping.oldName.equals(mapping.newName)
+                        && !other.oldName.equals(mapping.oldName)
+                        && !other.newName.equals(mapping.newName)) {
+                    throw new IllegalArgumentException("Conflicting mappings: "
+                            + mapping.oldName + " -> " + mapping.newName
+                            + " and " + other.oldName + " -> " + other.newName);
+                }
+                mapping.oldName = other.oldName;
+                mapping.newName = other.newName;
+            }
+            mapping.fields.putAll(other.fields);
+            mapping.methods.putAll(other.methods);
+            return mapping;
+        }));
     }
 }
