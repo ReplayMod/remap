@@ -520,17 +520,18 @@ class Transformer {
                             }
                             mapping = null;
                         }
-
-                        ITypeBinding superClass = declaringClass.getSuperclass();
-                        if (superClass != null) {
-                            parentQueue.offer(superClass);
-                        }
-                        for (ITypeBinding anInterface : declaringClass.getInterfaces()) {
-                            parentQueue.offer(anInterface);
-                        }
                         while (mapping == null) {
                             declaringClass = parentQueue.poll();
                             if (declaringClass == null) return true;
+
+                            ITypeBinding superClass = declaringClass.getSuperclass();
+                            if (superClass != null) {
+                                parentQueue.offer(superClass);
+                            }
+                            for (ITypeBinding anInterface : declaringClass.getInterfaces()) {
+                                parentQueue.offer(anInterface);
+                            }
+
                             name = stripGenerics(declaringClass.getQualifiedName());
                             if (name.isEmpty()) continue;
                             mapping = map.get(name);
