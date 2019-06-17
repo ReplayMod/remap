@@ -18,7 +18,11 @@ import com.intellij.psi.PsiPackage;
 import com.intellij.psi.PsiQualifiedNamedElement;
 import com.intellij.psi.PsiSwitchLabelStatement;
 import com.intellij.psi.PsiTypeElement;
-import com.replaymod.gradle.remap.Transformer.Mapping;
+import org.cadixdev.bombe.type.signature.MethodSignature;
+import org.cadixdev.lorenz.MappingSet;
+import org.cadixdev.lorenz.model.ClassMapping;
+import org.cadixdev.lorenz.model.Mapping;
+import org.cadixdev.lorenz.model.MethodMapping;
 
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -27,6 +31,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
+import static com.replaymod.gradle.remap.PsiUtils.getSignature;
+
 class PsiMapper {
     private static final String CLASS_MIXIN = "org.spongepowered.asm.mixin.Mixin";
     private static final String CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor";
@@ -34,15 +40,21 @@ class PsiMapper {
     private static final String CLASS_INJECT = "org.spongepowered.asm.mixin.injection.Inject";
     private static final String CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect";
 
-    private final Map<String, Mapping> map;
-    private final Map<String, Mapping> mixinMappings = new HashMap<>();
+    private final MappingSet map;
+    private final Map<String, ClassMapping<?, ?>> mixinMappings = new HashMap<>();
     private final PsiFile file;
     private boolean error;
     private TreeMap<TextRange, String> changes = new TreeMap<>(Comparator.comparing(TextRange::getStartOffset));
 
-    PsiMapper(Map<String, Mapping> map, PsiFile file) {
+    PsiMapper(MappingSet map, PsiFile file) {
         this.map = map;
         this.file = file;
+    }
+
+    private void error(PsiElement at, String message) {
+        int line = StringUtil.offsetToLineNumber(file.getText(), at.getTextOffset());
+        System.err.println(file.getName() + ":" + line + ": " + message);
+        error = true;
     }
 
     private void replace(PsiElement e, String with) {
@@ -87,12 +99,12 @@ class PsiMapper {
         if (declaringClass == null) return;
         String name = declaringClass.getQualifiedName();
         if (name == null) return;
-        Mapping mapping = this.mixinMappings.get(name);
+        ClassMapping<?, ?> mapping = this.mixinMappings.get(name);
         if (mapping == null) {
-            mapping = map.get(name);
+            mapping = map.getClassMapping(name).orElse(null);
         }
         if (mapping == null) return;
-        String mapped = mapping.fields.get(field.getName());
+        String mapped = mapping.getFieldMapping(field.getName()).map(Mapping::getDeobfuscatedName).orElse(null);
         if (mapped == null || mapped.equals(field.getName())) return;
         replaceIdentifier(expr, mapped);
 
@@ -100,20 +112,20 @@ class PsiMapper {
                 && !((PsiJavaCodeReferenceElement) expr).isQualified() // qualified access is fine
                 && !isSwitchCase(expr) // referencing constants in case statements is fine
         ) {
-            int line = StringUtil.offsetToLineNumber(file.getText(), expr.getTextOffset());
-            System.err.println(file.getName() + ":" + line + ": Implicit member reference to remapped field \"" + field.getName() + "\". " +
+            error(expr, "Implicit member reference to remapped field \"" + field.getName() + "\". " +
                     "This can cause issues if the remapped reference becomes shadowed by a local variable and is therefore forbidden. " +
                     "Use \"this." + field.getName() + "\" instead.");
-            error = true;
         }
     }
 
     private void map(PsiElement expr, PsiMethod method) {
+        if (method.isConstructor()) return;
+
         PsiClass declaringClass = method.getContainingClass();
         if (declaringClass == null) return;
         ArrayDeque<PsiClass> parentQueue = new ArrayDeque<>();
         parentQueue.offer(declaringClass);
-        Mapping mapping = null;
+        ClassMapping<?, ?> mapping = null;
 
         String name = declaringClass.getQualifiedName();
         if (name != null) {
@@ -121,7 +133,7 @@ class PsiMapper {
         }
         while (true) {
             if (mapping != null) {
-                String mapped = mapping.methods.get(method.getName());
+                String mapped = mapping.getMethodMapping(getSignature(method)).map(Mapping::getDeobfuscatedName).orElse(null);
                 if (mapped != null) {
                     if (!mapped.equals(method.getName())) {
                         replaceIdentifier(expr, mapped);
@@ -144,7 +156,7 @@ class PsiMapper {
 
                 name = declaringClass.getQualifiedName();
                 if (name == null) continue;
-                mapping = map.get(name);
+                mapping = map.getClassMapping(name).orElse(null);
             }
         }
     }
@@ -152,10 +164,11 @@ class PsiMapper {
     private void map(PsiElement expr, PsiQualifiedNamedElement resolved) {
         String name = resolved.getQualifiedName();
         if (name == null) return;
-        Mapping mapping = map.get(name);
+        ClassMapping<?, ?> mapping = map.getClassMapping(name).orElse(null);
         if (mapping == null) return;
-        String mapped = mapping.newName;
+        String mapped = mapping.getDeobfuscatedName();
         if (mapped.equals(name)) return;
+        mapped = mapped.replace('/', '.');
 
         if (expr.getText().equals(name)) {
             replace(expr, mapped);
@@ -189,7 +202,7 @@ class PsiMapper {
         return null;
     }
 
-    private void remapAccessors(Mapping mapping) {
+    private void remapAccessors(ClassMapping<?, ?> mapping) {
         file.accept(new JavaRecursiveElementVisitor() {
             @Override
             public void visitMethod(PsiMethod method) {
@@ -218,7 +231,7 @@ class PsiMapper {
                     throw new IllegalArgumentException("Cannot determine accessor target for " + method);
                 }
 
-                String mapped = mapping.fields.get(target);
+                String mapped = mapping.getFieldMapping(target).map(Mapping::getDeobfuscatedName).orElse(null);
                 if (mapped != null && !mapped.equals(target)) {
                     // Update accessor target
                     String parameterList;
@@ -235,7 +248,7 @@ class PsiMapper {
         });
     }
 
-    private void remapInjectsAndRedirects(Mapping mapping) {
+    private void remapInjectsAndRedirects(ClassMapping<?, ?> mapping) {
         file.accept(new JavaRecursiveElementVisitor() {
             @Override
             public void visitMethod(PsiMethod method) {
@@ -250,7 +263,21 @@ class PsiMapper {
                     // Note: mixin supports multiple targets, we do not (yet)
                     String literalValue = attribute.getLiteralValue();
                     if (literalValue == null) continue;
-                    String mapped = mapping.methods.get(literalValue);
+                    String mapped;
+                    if (literalValue.contains("(")) {
+                        mapped = mapping.getMethodMapping(MethodSignature.of(literalValue)).map(Mapping::getDeobfuscatedName).orElse(null);
+                    } else {
+                        mapped = null;
+                        for (MethodMapping methodMapping : mapping.getMethodMappings()) {
+                            if (methodMapping.getObfuscatedName().equals(literalValue)) {
+                                String name = methodMapping.getDeobfuscatedName();
+                                if (mapped != null && !mapped.equals(name)) {
+                                    error(attribute, "Ambiguous mixin method \"" + literalValue + "\" maps to \"" + mapped + "\" and \"" + name + "\"");
+                                }
+                                mapped = name;
+                            }
+                        }
+                    }
                     if (mapped != null && !mapped.equals(literalValue)) {
                         PsiAnnotationMemberValue value = attribute.getValue();
                         assert value != null;
@@ -261,12 +288,12 @@ class PsiMapper {
         });
     }
 
-    private Mapping remapInternalType(String internalType, StringBuilder result) {
+    private ClassMapping<?, ?> remapInternalType(String internalType, StringBuilder result) {
         if (internalType.charAt(0) == 'L') {
             String type = internalType.substring(1, internalType.length() - 1).replace('/', '.');
-            Mapping mapping = map.get(type);
+            ClassMapping<?, ?> mapping = map.getClassMapping(type).orElse(null);
             if (mapping != null) {
-                result.append('L').append(mapping.newName.replace('.', '/')).append(';');
+                result.append('L').append(mapping.getFullDeobfuscatedName()).append(';');
                 return mapping;
             }
         }
@@ -287,10 +314,14 @@ class PsiMapper {
         String returnType = signature.substring(argsEnd + 1);
 
         StringBuilder builder = new StringBuilder(signature.length() + 32);
-        Mapping mapping = remapInternalType(owner, builder);
+        ClassMapping<?, ?> mapping = remapInternalType(owner, builder);
         String mapped = null;
         if (mapping != null) {
-            mapped = (method ? mapping.methods : mapping.fields).get(name);
+            mapped = (method
+                    ? mapping.getMethodMapping(MethodSignature.of(signature.substring(ownerEnd + 1)))
+                    : mapping.getFieldMapping(name))
+                    .map(Mapping::getDeobfuscatedName)
+                    .orElse(null);
         }
         builder.append(mapped != null ? mapped : name);
         if (method) {
@@ -350,16 +381,18 @@ class PsiMapper {
 
                 PsiClass target = getMixinTarget(annotation);
                 if (target == null) return;
+                String qualifiedName = target.getQualifiedName();
+                if (qualifiedName == null) return;
 
-                Mapping mapping = map.get(target.getQualifiedName());
+                ClassMapping<?, ?> mapping = map.getClassMapping(qualifiedName).orElse(null);
                 if (mapping == null) return;
 
                 mixinMappings.put(psiClass.getQualifiedName(), mapping);
 
-                if (!mapping.fields.isEmpty()) {
+                if (!mapping.getFieldMappings().isEmpty()) {
                     remapAccessors(mapping);
                 }
-                if (!mapping.methods.isEmpty()) {
+                if (!mapping.getMethodMappings().isEmpty()) {
                     remapInjectsAndRedirects(mapping);
                 }
             }

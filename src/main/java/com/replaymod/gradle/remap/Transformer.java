@@ -11,6 +11,8 @@ import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.local.CoreLocalFileSystem;
 import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiManager;
+import com.replaymod.gradle.remap.legacy.LegacyMapping;
+import org.cadixdev.lorenz.MappingSet;
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys;
 import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot;
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer;
@@ -37,21 +39,20 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 class Transformer {
-    private Map<String, Mapping> map;
+    private MappingSet map;
     private String[] classpath;
     private boolean fail;
 
     public static void main(String[] args) throws IOException {
-        Map<String, Mapping> mappings;
+        MappingSet mappings;
         if (args[0].isEmpty()) {
-            mappings = new HashMap<>();
+            mappings = MappingSet.create();
         } else {
-            mappings = readMappings(new File(args[0]), args[1].equals("true"));
+            mappings = LegacyMapping.readMappingSet(new File(args[0]).toPath(), args[1].equals("true"));
         }
         Transformer transformer = new Transformer(mappings);
 
@@ -95,7 +96,7 @@ class Transformer {
         }
     }
 
-    public Transformer(Map<String, Mapping> mappings) {
+    public Transformer(MappingSet mappings) {
         this.map = mappings;
     }
 
@@ -165,104 +166,4 @@ class Transformer {
         }
     }
 
-    public static class Mapping {
-        public String oldName;
-        public String newName;
-        public Map<String, String> fields = new HashMap<>();
-        public Map<String, String> methods = new HashMap<>();
-    }
-
-    public static Map<String, Mapping> readMappings(File mappingFile, boolean invert) throws IOException {
-        Map<String, Mapping> mappings = new HashMap<>();
-        Map<String, Mapping> revMappings = new HashMap<>();
-        int lineNumber = 0;
-        for (String line : Files.readAllLines(mappingFile.toPath(), StandardCharsets.UTF_8)) {
-            lineNumber++;
-            if (line.trim().startsWith("#") || line.trim().isEmpty()) continue;
-
-            String[] parts = line.split(" ");
-            if (parts.length < 2 || line.contains(";")) {
-                throw new IllegalArgumentException("Failed to parse line " + lineNumber + " in " + mappingFile.getPath() + ".");
-            }
-
-            Mapping mapping = mappings.get(parts[0]);
-            if (mapping == null) {
-                mapping = new Mapping();
-                mapping.oldName = mapping.newName = parts[0];
-                mappings.put(mapping.oldName, mapping);
-            }
-
-            if (parts.length == 2) {
-                // Class mapping
-                mapping.newName = parts[1];
-                // Possibly merge with reverse mapping
-                Mapping revMapping = revMappings.remove(mapping.newName);
-                if (revMapping != null) {
-                    mapping.fields.putAll(revMapping.fields);
-                    mapping.methods.putAll(revMapping.methods);
-                }
-                revMappings.put(mapping.newName, mapping);
-            } else if (parts.length == 3 || parts.length == 4) {
-                String fromName = parts[1];
-                String toName;
-                Mapping revMapping;
-                if (parts.length == 4) {
-                    toName = parts[3];
-                    revMapping = revMappings.get(parts[2]);
-                    if (revMapping == null) {
-                        revMapping = new Mapping();
-                        revMapping.oldName = revMapping.newName = parts[2];
-                        revMappings.put(revMapping.newName, revMapping);
-                    }
-                } else {
-                    toName = parts[2];
-                    revMapping = mapping;
-                }
-                if (fromName.endsWith("()")) {
-                    // Method mapping
-                    fromName = fromName.substring(0, fromName.length() - 2);
-                    toName = toName.substring(0, toName.length() - 2);
-                    mapping.methods.put(fromName, toName);
-                    revMapping.methods.put(fromName, toName);
-                } else {
-                    // Field mapping
-                    mapping.fields.put(fromName, toName);
-                    revMapping.fields.put(fromName, toName);
-                }
-            } else {
-                throw new IllegalArgumentException("Failed to parse line " + lineNumber + " in " + mappingFile.getPath() + ".");
-            }
-        }
-        if (invert) {
-            Stream.concat(
-                    mappings.values().stream(),
-                    revMappings.values().stream()
-            ).distinct().forEach(it -> {
-                String oldName = it.oldName;
-                it.oldName = it.newName;
-                it.newName = oldName;
-                it.fields = it.fields.entrySet().stream().collect(Collectors.toMap(Entry::getValue, Entry::getKey));
-                it.methods = it.methods.entrySet().stream().collect(Collectors.toMap(Entry::getValue, Entry::getKey));
-            });
-        }
-        return Stream.concat(
-                mappings.values().stream(),
-                revMappings.values().stream()
-        ).collect(Collectors.toMap(mapping -> mapping.oldName, Function.identity(), (mapping, other) -> {
-            if (!other.oldName.equals(other.newName)) {
-                if (!mapping.oldName.equals(mapping.newName)
-                        && !other.oldName.equals(mapping.oldName)
-                        && !other.newName.equals(mapping.newName)) {
-                    throw new IllegalArgumentException("Conflicting mappings: "
-                            + mapping.oldName + " -> " + mapping.newName
-                            + " and " + other.oldName + " -> " + other.newName);
-                }
-                mapping.oldName = other.oldName;
-                mapping.newName = other.newName;
-            }
-            mapping.fields.putAll(other.fields);
-            mapping.methods.putAll(other.methods);
-            return mapping;
-        }));
-    }
 }
