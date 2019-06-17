@@ -1,5 +1,7 @@
-apply plugin: 'java'
-apply plugin: 'maven'
+plugins {
+    id 'java'
+    id 'maven-publish'
+}
 
 sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
@@ -16,5 +18,13 @@ dependencies {
 }
 
 jar {
-    baseName 'remap'
+    archiveBaseName.set('remap')
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from components.java
+        }
+    }
 }
