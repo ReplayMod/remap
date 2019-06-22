@@ -4,6 +4,7 @@ import com.intellij.codeInsight.CustomExceptionHandler;
 import com.intellij.mock.MockProject;
 import com.intellij.openapi.extensions.ExtensionPoint;
 import com.intellij.openapi.extensions.Extensions;
+import com.intellij.openapi.extensions.ExtensionsArea;
 import com.intellij.openapi.util.Disposer;
 import com.intellij.openapi.vfs.StandardFileSystems;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -42,7 +43,7 @@ import java.util.Map.Entry;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-class Transformer {
+public class Transformer {
     private MappingSet map;
     private String[] classpath;
     private boolean fail;
@@ -131,7 +132,10 @@ class Transformer {
                     config,
                     EnvironmentConfigFiles.JVM_CONFIG_FILES
             );
-            Extensions.getRootArea().registerExtensionPoint(CustomExceptionHandler.KEY.getName(), CustomExceptionHandler.class.getName(), ExtensionPoint.Kind.INTERFACE);
+            ExtensionsArea rootArea = Extensions.getRootArea();
+            if (!rootArea.hasExtensionPoint(CustomExceptionHandler.KEY)) {
+                rootArea.registerExtensionPoint(CustomExceptionHandler.KEY.getName(), CustomExceptionHandler.class.getName(), ExtensionPoint.Kind.INTERFACE);
+            }
 
             MockProject project = (MockProject) environment.getProject();
 
