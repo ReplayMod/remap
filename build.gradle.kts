@@ -1,31 +1,34 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    id 'java'
-    id 'maven-publish'
+    kotlin("jvm") version "1.3.40"
+    `maven-publish`
 }
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+tasks.withType<KotlinCompile>().configureEach {
+    kotlinOptions.jvmTarget = "1.8"
+}
 
-group = 'com.github.replaymod'
-version = 'SNAPSHOT'
+group = "com.github.replaymod"
+version = "SNAPSHOT"
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    compile 'org.jetbrains.kotlin:kotlin-compiler:1.3.40'
-    compile 'org.cadixdev:lorenz:0.5.0'
+    compile("org.jetbrains.kotlin:kotlin-compiler:1.3.40")
+    compile("org.cadixdev:lorenz:0.5.0")
 }
 
-jar {
-    archiveBaseName.set('remap')
+tasks.named<Jar>("jar") {
+    archiveBaseName.set("remap")
 }
 
 publishing {
     publications {
-        maven(MavenPublication) {
-            from components.java
+        create("maven", MavenPublication::class) {
+            from(components["java"])
         }
     }
 }
