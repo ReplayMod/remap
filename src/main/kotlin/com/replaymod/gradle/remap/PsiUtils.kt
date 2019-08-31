@@ -1,7 +1,5 @@
 package com.replaymod.gradle.remap
 
-import com.intellij.psi.*
-import com.intellij.psi.util.TypeConversionUtil
 import org.cadixdev.bombe.type.ArrayType
 import org.cadixdev.bombe.type.FieldType
 import org.cadixdev.bombe.type.MethodDescriptor
@@ -9,6 +7,8 @@ import org.cadixdev.bombe.type.ObjectType
 import org.cadixdev.bombe.type.Type
 import org.cadixdev.bombe.type.VoidType
 import org.cadixdev.bombe.type.signature.MethodSignature
+import org.jetbrains.kotlin.com.intellij.psi.*
+import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil
 
 internal object PsiUtils {
     fun getSignature(method: PsiMethod): MethodSignature = MethodSignature(method.name, getDescriptor(method))

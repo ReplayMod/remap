@@ -1,12 +1,12 @@
 package com.replaymod.gradle.remap
 
-import com.intellij.openapi.util.TextRange
-import com.intellij.openapi.util.text.StringUtil
-import com.intellij.psi.*
 import com.replaymod.gradle.remap.PsiUtils.getSignature
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.model.ClassMapping
+import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
+import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
+import org.jetbrains.kotlin.com.intellij.psi.*
 import java.util.*
 
 internal class PsiMapper(private val map: MappingSet, private val file: PsiFile) {

@@ -17,7 +17,8 @@ repositories {
 }
 
 dependencies {
-    compile("org.jetbrains.kotlin:kotlin-compiler:1.3.40")
+    compile("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.3.40")
+    implementation(kotlin("stdlib"))
     compile("org.cadixdev:lorenz:0.5.0")
 }
 
