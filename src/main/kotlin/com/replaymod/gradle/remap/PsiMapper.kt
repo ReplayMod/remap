@@ -215,6 +215,9 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         })
     }
 
+    private fun remapInternalType(internalType: String): String =
+            StringBuilder().apply { remapInternalType(internalType, this) }.toString()
+
     private fun remapInternalType(internalType: String, result: StringBuilder): ClassMapping<*, *>? {
         if (internalType[0] == 'L') {
             val type = internalType.substring(1, internalType.length - 1).replace('/', '.')
@@ -226,6 +229,18 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         }
         result.append(internalType)
         return null
+    }
+
+    private fun remapMixinTarget(target: String): String {
+        return if (target.contains(':') || target.contains('(')) {
+            remapFullyQualifiedMethodOrField(target)
+        } else {
+            if (target[0] == 'L') {
+                remapInternalType(target)
+            } else {
+                remapInternalType("L$target;").drop(1).dropLast(1)
+            }
+        }
     }
 
     private fun remapFullyQualifiedMethodOrField(signature: String): String {
@@ -288,7 +303,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 for (attribute in annotation.parameterList.attributes) {
                     if ("target" != attribute.name) continue
                     val signature = attribute.literalValue ?: continue
-                    val newSignature = remapFullyQualifiedMethodOrField(signature)
+                    val newSignature = remapMixinTarget(signature)
                     if (newSignature != signature) {
                         val value = attribute.value!!
                         replace(value, "\"$newSignature\"")
