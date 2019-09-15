@@ -4,9 +4,20 @@ import com.replaymod.gradle.remap.PsiUtils.getSignature
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.model.ClassMapping
+import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
+import org.jetbrains.kotlin.com.intellij.lang.ASTNode
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
+import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
+import org.jetbrains.kotlin.descriptors.FunctionDescriptor
+import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
+import org.jetbrains.kotlin.lexer.KtTokens
+import org.jetbrains.kotlin.name.Name
+import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
+import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameByGetMethodName
 import java.util.*
 
 internal class PsiMapper(private val map: MappingSet, private val file: PsiFile) {
@@ -25,11 +36,14 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     }
 
     private fun replaceIdentifier(parent: PsiElement, with: String) {
-        for (child in parent.children) {
-            if (child is PsiIdentifier) {
+        var child = parent.firstChild
+        while (child != null) {
+            if (child is PsiIdentifier
+                    || child is ASTNode && child.elementType == KtTokens.IDENTIFIER) {
                 replace(child, with)
                 return
             }
+            child = child.nextSibling
         }
     }
 
@@ -74,9 +88,50 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     }
 
     private fun map(expr: PsiElement, method: PsiMethod) {
-        if (method.isConstructor) return
+        if (method.isConstructor) {
+            if (expr is KtSimpleNameExpression) {
+                map(expr, method.containingClass ?: return)
+            }
+            return
+        }
 
-        var declaringClass: PsiClass? = method.containingClass ?: return
+        val mapped = findMapping(method)
+        if (mapped != null && mapped != method.name) {
+            replaceIdentifier(expr, mapped)
+        }
+    }
+
+    private fun map(expr: PsiElement, method: KtNamedFunction) {
+        val psiMethod = method.getRepresentativeLightMethod()
+        val mapped = findMapping(psiMethod ?: return)
+        if (mapped != null && mapped != method.name) {
+            replaceIdentifier(expr, mapped)
+        }
+    }
+
+    private fun map(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
+        val getter = property.getMethod.findPsi() as? PsiMethod ?: return
+        val mappedGetter = findMapping(getter) ?: return
+        if (mappedGetter != getter.name) {
+            val mapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))!!.identifier
+            replaceIdentifier(expr, mapped)
+        }
+    }
+
+    // See caller for why this exists
+    private fun map(expr: PsiElement, method: FunctionDescriptor) {
+        for (overriddenDescriptor in method.overriddenDescriptors) {
+            val overriddenPsi = overriddenDescriptor.findPsi()
+            if (overriddenPsi != null) {
+                map(expr, overriddenPsi) // found a psi element, continue as usually
+            } else {
+                map(expr, overriddenDescriptor) // recursion
+            }
+        }
+    }
+
+    private fun findMapping(method: PsiMethod): String? {
+        var declaringClass: PsiClass? = method.containingClass ?: return null
         val parentQueue = ArrayDeque<PsiClass>()
         parentQueue.offer(declaringClass)
         var mapping: ClassMapping<*, *>? = null
@@ -89,16 +144,13 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
             if (mapping != null) {
                 val mapped = mapping.findMethodMapping(getSignature(method))?.deobfuscatedName
                 if (mapped != null) {
-                    if (mapped != method.name) {
-                        replaceIdentifier(expr, mapped)
-                    }
-                    return
+                    return mapped
                 }
                 mapping = null
             }
             while (mapping == null) {
                 declaringClass = parentQueue.poll()
-                if (declaringClass == null) return
+                if (declaringClass == null) return null
 
                 val superClass = declaringClass.superClass
                 if (superClass != null) {
@@ -126,6 +178,15 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
             replace(expr, mapped)
             return
         }
+        val parent: PsiElement? = expr.parent
+        if ((parent is KtUserType || parent is KtQualifiedExpression) && parent.text == name) {
+            replace(parent, mapped)
+            return
+        }
+        // FIXME this incorrectly filters things like "Packet<?>" and doesn't filter same-name type aliases
+        // if (expr.text != name.substring(name.lastIndexOf('.') + 1)) {
+        //     return // type alias, will be remapped at its definition
+        // }
         replaceIdentifier(expr, mapped.substring(mapped.lastIndexOf('.') + 1))
     }
 
@@ -133,6 +194,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         when (resolved) {
             is PsiField -> map(expr, resolved)
             is PsiMethod -> map(expr, resolved)
+            is KtNamedFunction -> map(expr, resolved.getRepresentativeLightMethod())
             is PsiClass, is PsiPackage -> map(expr, resolved as PsiQualifiedNamedElement)
         }
     }
@@ -313,7 +375,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         })
     }
 
-    fun remapFile(): String? {
+    fun remapFile(bindingContext: BindingContext): String? {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
@@ -358,6 +420,40 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 super.visitReferenceElement(reference)
             }
         })
+
+        if (file is KtFile) {
+            file.accept(object : KtTreeVisitor<Void>() {
+                override fun visitNamedFunction(function: KtNamedFunction, data: Void?): Void? {
+                    if (valid(function)) {
+                        map(function, function)
+                    }
+                    return super.visitNamedFunction(function, data)
+                }
+
+                override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
+                    if (valid(expression)) {
+                        val target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
+                        if (target is SyntheticJavaPropertyDescriptor) {
+                            map(expression, target)
+                        } else if (target != null && (target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED) {
+                            val targetPsi = target.findPsi()
+                            if (targetPsi != null) {
+                                map(expression, targetPsi)
+                            } else if (target is FunctionDescriptor) {
+                                // Appears to be the case if we're referencing an overwritten function in a previously
+                                // compiled kotlin file
+                                // E.g. A.f overwrites B.f overwrites C.f
+                                //      C is a Minecraft class, B is a previously compiled (and already remapped) kotlin
+                                //      class and we're currently in A.f trying to call `super.f()`.
+                                //      `target` is a DeserializedSimpleFunctionDescriptor with no linked PSI element.
+                                map(expression, target)
+                            }
+                        }
+                    }
+                    return super.visitReferenceExpression(expression, data)
+                }
+            }, null)
+        }
 
         return getResult(file.text)
     }

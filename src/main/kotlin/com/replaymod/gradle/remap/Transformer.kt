@@ -26,10 +26,12 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.psi.KtFile
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
 import java.io.InputStreamReader
+import java.lang.Exception
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
@@ -54,6 +56,7 @@ class Transformer(private val map: MappingSet) {
             config.put(CommonConfigurationKeys.MODULE_NAME, "main")
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, JavaSourceRoot(tmpDir.toFile(), ""))
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, KotlinSourceRoot(tmpDir.toAbsolutePath().toString(), false))
+            config.addAll<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, classpath!!.map { JvmClasspathRoot(File(it)) })
             config.put<MessageCollector>(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, true))
 
             val environment = KotlinCoreEnvironment.createForProduction(
@@ -67,24 +70,30 @@ class Transformer(private val map: MappingSet) {
             }
 
             val project = environment.project as MockProject
+            val psiManager = PsiManager.getInstance(project)
+            val vfs = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL) as CoreLocalFileSystem
+            val virtualFiles = sources.mapValues { vfs.findFileByIoFile(tmpDir.resolve(it.key).toFile())!! }
+            val psiFiles = virtualFiles.mapValues { psiManager.findFile(it.value)!! }
+            val ktFiles = psiFiles.values.filterIsInstance<KtFile>()
 
-            environment.updateClasspath(classpath!!.map { JvmClasspathRoot(File(it)) })
-
-            TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
+            val analysis = TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
                     project,
-                    emptyList(),
+                    ktFiles,
                     NoScopeRecordCliBindingTrace(),
                     environment.configuration,
                     { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
             )
 
-            val vfs = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL) as CoreLocalFileSystem
             val results = HashMap<String, String>()
             for (name in sources.keys) {
                 val file = vfs.findFileByIoFile(tmpDir.resolve(name).toFile())!!
-                val psiFile = PsiManager.getInstance(project).findFile(file)!!
+                val psiFile = psiManager.findFile(file)!!
 
-                val mapped = PsiMapper(map, psiFile).remapFile()
+                val mapped = try {
+                    PsiMapper(map, psiFile).remapFile(analysis.bindingContext)
+                } catch (e: Exception) {
+                    throw RuntimeException("Failed to map file \"$name\".", e)
+                }
                 if (mapped == null) {
                     fail = true
                     continue
