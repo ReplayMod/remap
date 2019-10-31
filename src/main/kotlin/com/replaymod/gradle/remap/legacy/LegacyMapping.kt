@@ -1,8 +1,8 @@
 package com.replaymod.gradle.remap.legacy
 
 import org.cadixdev.lorenz.MappingSet
+import java.io.*
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -19,16 +19,28 @@ class LegacyMapping(var oldName: String, var newName: String) {
         }
 
         @Throws(IOException::class)
+        fun readMappingSet(fileName: String, reader: Reader, invert: Boolean): MappingSet {
+            return LegacyMappingsReader(readMappings(fileName, reader, invert)).read()
+        }
+
+        @Throws(IOException::class)
         fun readMappings(mappingFile: Path, invert: Boolean): Map<String, LegacyMapping> {
+            Files.newBufferedReader(mappingFile, StandardCharsets.UTF_8).use {
+                return readMappings(mappingFile.toString(), it, invert)
+            }
+        }
+
+        @Throws(IOException::class)
+        fun readMappings(fileName: String, reader: Reader, invert: Boolean): Map<String, LegacyMapping> {
             val mappings = HashMap<String, LegacyMapping>()
             val revMappings = HashMap<String, LegacyMapping>()
             var lineNumber = 0
-            for (line in Files.readAllLines(mappingFile, StandardCharsets.UTF_8)) {
+            for (line in BufferedReader(reader).lineSequence()) {
                 lineNumber++
                 if (line.trim { it <= ' ' }.startsWith("#") || line.trim { it <= ' ' }.isEmpty()) continue
 
                 val parts = line.split(" ".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-                require(!(parts.size < 2 || line.contains(";"))) { "Failed to parse line $lineNumber in $mappingFile." }
+                require(!(parts.size < 2 || line.contains(";"))) { "Failed to parse line $lineNumber in $fileName." }
 
                 var mapping: LegacyMapping? = mappings[parts[0]]
                 if (mapping == null) {
@@ -73,7 +85,7 @@ class LegacyMapping(var oldName: String, var newName: String) {
                         revMapping.fields[fromName] = toName
                     }
                 } else {
-                    throw IllegalArgumentException("Failed to parse line $lineNumber in $mappingFile.")
+                    throw IllegalArgumentException("Failed to parse line $lineNumber in $fileName.")
                 }
             }
             if (invert) {
