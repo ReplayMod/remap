@@ -8,7 +8,15 @@ import org.cadixdev.bombe.type.Type
 import org.cadixdev.bombe.type.VoidType
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.jetbrains.kotlin.com.intellij.psi.*
+import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil
+
+internal val PsiClass.dollarQualifiedName: String? get() {
+    val parent = PsiTreeUtil.getParentOfType<PsiClass>(this, PsiClass::class.java) ?: return qualifiedName
+    val parentName = parent.dollarQualifiedName ?: return qualifiedName
+    val selfName = name ?: return qualifiedName
+    return "$parentName$$selfName"
+}
 
 internal object PsiUtils {
     fun getSignature(method: PsiMethod): MethodSignature = MethodSignature(method.name, getDescriptor(method))
@@ -26,7 +34,7 @@ internal object PsiUtils {
         }
         is PsiClassType -> {
             val resolved = erasedType.resolve() ?: throw NullPointerException("Failed to resolve type $erasedType")
-            val qualifiedName = resolved.qualifiedName
+            val qualifiedName = resolved.dollarQualifiedName
                     ?: throw NullPointerException("Type $erasedType has no qualified name.")
             ObjectType(qualifiedName)
         }

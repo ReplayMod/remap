@@ -67,8 +67,8 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     private fun map(expr: PsiElement, field: PsiField) {
         val fieldName = field.name ?: return
         val declaringClass = field.containingClass ?: return
-        val name = declaringClass.qualifiedName ?: return
-        var mapping: ClassMapping<*, *>? = this.mixinMappings[name]
+        val name = declaringClass.dollarQualifiedName ?: return
+        var mapping: ClassMapping<*, *>? = this.mixinMappings[declaringClass.qualifiedName ?: return]
         if (mapping == null) {
             mapping = map.findClassMapping(name)
         }
@@ -168,7 +168,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                     parentQueue.offer(anInterface)
                 }
 
-                name = declaringClass.qualifiedName
+                name = declaringClass.dollarQualifiedName
                 if (name == null) continue
                 mapping = map.findClassMapping(name)
             }
@@ -177,10 +177,11 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
     private fun map(expr: PsiElement, resolved: PsiQualifiedNamedElement) {
         val name = resolved.qualifiedName ?: return
-        val mapping = map.findClassMapping(name) ?: return
-        var mapped = mapping.deobfuscatedName
-        if (mapped == name) return
-        mapped = mapped.replace('/', '.')
+        val dollarName = (if (resolved is PsiClass) resolved.dollarQualifiedName else name) ?: return
+        val mapping = map.findClassMapping(dollarName) ?: return
+        var mapped = mapping.fullDeobfuscatedName
+        if (mapped == dollarName) return
+        mapped = mapped.replace('/', '.').replace('$', '.')
 
         if (expr.text == name) {
             replace(expr, mapped)
@@ -391,7 +392,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 remapAtTargets()
 
                 val target = getMixinTarget(annotation) ?: return
-                val qualifiedName = target.qualifiedName ?: return
+                val qualifiedName = target.dollarQualifiedName ?: return
 
                 val mapping = map.findClassMapping(qualifiedName) ?: return
 
