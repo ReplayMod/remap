@@ -113,8 +113,16 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         val getter = property.getMethod.findPsi() as? PsiMethod ?: return
         val mappedGetter = findMapping(getter) ?: return
         if (mappedGetter != getter.name) {
-            val mapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))!!.identifier
-            replaceIdentifier(expr, mapped)
+            val maybeMapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))
+            if (maybeMapped == null) {
+                // Can happen if a method is a synthetic property in the current mapping (e.g. `isNonBoss`) but not
+                // in the target mapping (e.g. `canUsePortal()`)
+                // TODO probably also want to convert in the opposite direction, though that's a lot harder
+                replaceIdentifier(expr, "$mappedGetter()")
+            } else {
+                val mapped = maybeMapped.identifier
+                replaceIdentifier(expr, mapped)
+            }
         }
     }
 
