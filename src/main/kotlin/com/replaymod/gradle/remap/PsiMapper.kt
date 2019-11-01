@@ -225,10 +225,11 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     private fun remapAccessors(mapping: ClassMapping<*, *>) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
-                val annotation = method.getAnnotation(CLASS_ACCESSOR) ?: return
+                val annotation = method.getAnnotation(CLASS_ACCESSOR) ?: method.getAnnotation(CLASS_INVOKER) ?: return
 
                 val methodName = method.name
                 val targetByName = when {
+                    methodName.startsWith("invoke") -> methodName.substring(6)
                     methodName.startsWith("is") -> methodName.substring(2)
                     methodName.startsWith("get") || methodName.startsWith("set") -> methodName.substring(3)
                     else -> null
@@ -238,7 +239,11 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                     it.name == null || it.name == "value"
                 }?.literalValue ?: targetByName ?: throw IllegalArgumentException("Cannot determine accessor target for $method")
 
-                val mapped = mapping.findFieldMapping(target)?.deobfuscatedName
+                val mapped = if (methodName.startsWith("invoke")) {
+                    mapping.methodMappings.find { it.obfuscatedName == target }?.deobfuscatedName
+                } else {
+                    mapping.findFieldMapping(target)?.deobfuscatedName
+                }
                 if (mapped != null && mapped != target) {
                     // Update accessor target
                     replace(annotation.parameterList, if (mapped == targetByName) {
@@ -470,6 +475,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     companion object {
         private const val CLASS_MIXIN = "org.spongepowered.asm.mixin.Mixin"
         private const val CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor"
+        private const val CLASS_INVOKER = "org.spongepowered.asm.mixin.gen.Invoker"
         private const val CLASS_AT = "org.spongepowered.asm.mixin.injection.At"
         private const val CLASS_INJECT = "org.spongepowered.asm.mixin.injection.Inject"
         private const val CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect"
