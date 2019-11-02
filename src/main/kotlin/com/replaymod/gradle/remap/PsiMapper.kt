@@ -209,7 +209,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
     }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun getMixinTarget(annotation: PsiAnnotation): String? {
+    private fun getMixinTarget(annotation: PsiAnnotation): ClassMapping<*, *>? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -217,12 +217,19 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 if (value !is PsiClassObjectAccessExpression) continue
                 val type = value.operand
                 val reference = type.innermostComponentReferenceElement ?: continue
-                return (reference.resolve() as PsiClass?)?.dollarQualifiedName
+                val qualifiedName = (reference.resolve() as PsiClass?)?.dollarQualifiedName ?: continue
+                return map.findClassMapping(qualifiedName) ?: continue
             }
             if ("targets" == name) {
                 val value = pair.value
                 if (value !is PsiLiteral) continue
-                return value.value as? String ?: continue
+                val qualifiedName = value.value as? String ?: continue
+                val mapping = map.findClassMapping(qualifiedName) ?: continue
+                val mapped = mapping.fullDeobfuscatedName?.replace('/', '.')
+                if (mapped != qualifiedName) {
+                    replace(value, "\"$mapped\"")
+                }
+                return mapping
             }
         }
         return null
@@ -402,9 +409,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
                 remapAtTargets()
 
-                val qualifiedName = getMixinTarget(annotation) ?: return
-
-                val mapping = map.findClassMapping(qualifiedName) ?: return
+                val mapping = getMixinTarget(annotation) ?: return
 
                 mixinMappings[psiClass.qualifiedName!!] = mapping
 
