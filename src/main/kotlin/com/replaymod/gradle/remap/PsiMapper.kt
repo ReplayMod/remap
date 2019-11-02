@@ -208,16 +208,22 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         }
     }
 
-    // Note: Supports only Mixins with a single target (ignores others) and only ones specified via class literals
-    private fun getMixinTarget(annotation: PsiAnnotation): PsiClass? {
+    // Note: Supports only Mixins with a single target (ignores others)
+    private fun getMixinTarget(annotation: PsiAnnotation): String? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
-            if (name != null && "value" != name) continue
-            val value = pair.value
-            if (value !is PsiClassObjectAccessExpression) continue
-            val type = value.operand
-            val reference = type.innermostComponentReferenceElement ?: continue
-            return reference.resolve() as PsiClass?
+            if (name == null || "value" == name) {
+                val value = pair.value
+                if (value !is PsiClassObjectAccessExpression) continue
+                val type = value.operand
+                val reference = type.innermostComponentReferenceElement ?: continue
+                return (reference.resolve() as PsiClass?)?.dollarQualifiedName
+            }
+            if ("targets" == name) {
+                val value = pair.value
+                if (value !is PsiLiteral) continue
+                return value.value as? String ?: continue
+            }
         }
         return null
     }
@@ -396,8 +402,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
                 remapAtTargets()
 
-                val target = getMixinTarget(annotation) ?: return
-                val qualifiedName = target.dollarQualifiedName ?: return
+                val qualifiedName = getMixinTarget(annotation) ?: return
 
                 val mapping = map.findClassMapping(qualifiedName) ?: return
 
