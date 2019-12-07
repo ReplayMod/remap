@@ -6,6 +6,7 @@ import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.model.ClassMapping
 import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
 import org.jetbrains.kotlin.com.intellij.lang.ASTNode
+import org.jetbrains.kotlin.com.intellij.lang.jvm.JvmModifier
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
@@ -97,6 +98,22 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
         val mapped = findMapping(method)
         if (mapped != null && mapped != method.name) {
+            val maybeGetter = propertyNameByGetMethodName(Name.identifier(mapped))
+            if (maybeGetter != null // must have getter-style name
+                    && !method.hasParameters() // getters cannot take any arguments
+                    && method.returnType != PsiType.VOID // and must return some value
+                    && !method.hasModifier(JvmModifier.STATIC) // synthetic properties cannot be static
+                    // `super.getDebugInfo()` is a special case which cannot be replaced with a synthetic property
+                    && expr.parent.parent.let { it !is KtDotQualifiedExpression || it.firstChild !is KtSuperExpression }
+                    // cannot use synthetic properties outside of kotlin files (cause they're a kotlin thing)
+                    && expr.containingFile  is KtFile) {
+                // E.g. `entity.canUsePortal()` maps to `entity.isNonBoss()` but when we're using kotlin and the target
+                // isn't (as should be the case for remapped names), we can also write that as `entity.isNonBoss` (i.e.
+                // as a synthetic property).
+                // This is the reverse to the operation in [map(PsiElement, SyntheticJavaPropertyDescriptor)].
+                replace(expr.parent, maybeGetter.identifier)
+                return
+            }
             replaceIdentifier(expr, mapped)
         }
     }
