@@ -241,7 +241,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 val value = pair.value
                 if (value !is PsiLiteral) continue
                 val qualifiedName = value.value as? String ?: continue
-                val mapping = map.findClassMapping(qualifiedName) ?: continue
+                val mapping = map.findPotentialInnerClassMapping(qualifiedName) ?: continue
                 val mapped = mapping.fullDeobfuscatedName?.replace('/', '.')
                 if (mapped != qualifiedName) {
                     replace(value, "\"$mapped\"")
