@@ -297,22 +297,30 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                     if ("method" != attribute.name) continue
                     // Note: mixin supports multiple targets, we do not (yet)
                     val literalValue = attribute.literalValue ?: continue
-                    var mapped: String?
-                    if (literalValue.contains("(")) {
-                        mapped = mapping.findMethodMapping(MethodSignature.of(literalValue))?.deobfuscatedName
+                    val methodMapping = if ('(' in literalValue) {
+                        val signature = MethodSignature.of(literalValue)
+                        // mapping.findMethodMapping(signature)
+                        // TODO for some reason above doesn't work (probably related to legacy mappings) but below does
+                        mapping.methodMappings.find { it.signature == signature }
                     } else {
-                        mapped = null
-                        for (methodMapping in mapping.methodMappings) {
-                            if (methodMapping.obfuscatedName == literalValue) {
-                                val name = methodMapping.deobfuscatedName
-                                if (mapped != null && mapped != name) {
-                                    error(attribute, "Ambiguous mixin method \"$literalValue\" maps to \"$mapped\" and \"$name\"")
-                                }
-                                mapped = name
-                            }
+                        val mappings = mapping.methodMappings.filter { it.obfuscatedName == literalValue }
+                        if (mappings.size > 1) {
+                            error(attribute, "Ambiguous mixin method \"$literalValue\" may refer to any of: ${mappings.joinToString { "\"$it\"" }}")
                         }
+                        mappings.firstOrNull()
+                    } ?: continue
+
+                    val ambiguousName = mapping.methodMappings.any {
+                        it != methodMapping && it.deobfuscatedName == methodMapping.deobfuscatedName
                     }
-                    if (mapped != null && mapped != literalValue) {
+                    val mappedSignature = methodMapping.deobfuscatedSignature
+                    val mapped = mappedSignature.name + if (ambiguousName) {
+                        mappedSignature.descriptor
+                    } else {
+                        ""
+                    }
+
+                    if (mapped != literalValue) {
                         val value = attribute.value!!
                         replace(value, '"'.toString() + mapped + '"'.toString())
                     }
