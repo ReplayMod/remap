@@ -40,10 +40,9 @@ import kotlin.system.exitProcess
 
 class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
-    private var fail: Boolean = false
 
     @Throws(IOException::class)
-    fun remap(sources: Map<String, String>): Map<String, String> {
+    fun remap(sources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
         val tmpDir = Files.createTempDirectory("remap")
         try {
             for ((unitName, source) in sources) {
@@ -84,7 +83,7 @@ class Transformer(private val map: MappingSet) {
                     { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
             )
 
-            val results = HashMap<String, String>()
+            val results = HashMap<String, Pair<String, List<Pair<Int, String>>>>()
             for (name in sources.keys) {
                 val file = vfs.findFileByIoFile(tmpDir.resolve(name).toFile())!!
                 val psiFile = psiManager.findFile(file)!!
@@ -93,10 +92,6 @@ class Transformer(private val map: MappingSet) {
                     PsiMapper(map, psiFile).remapFile(analysis.bindingContext)
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
-                }
-                if (mapped == null) {
-                    fail = true
-                    continue
                 }
                 results[name] = mapped
             }
@@ -142,14 +137,14 @@ class Transformer(private val map: MappingSet) {
 
             for (name in sources.keys) {
                 println(name)
-                val lines = results.getValue(name).split("\n").dropLastWhile { it.isEmpty() }.toTypedArray()
+                val lines = results.getValue(name).first.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray()
                 println(lines.size)
                 for (line in lines) {
                     println(line)
                 }
             }
 
-            if (transformer.fail) {
+            if (results.any { it.value.second.isNotEmpty() }) {
                 exitProcess(1)
             }
         }

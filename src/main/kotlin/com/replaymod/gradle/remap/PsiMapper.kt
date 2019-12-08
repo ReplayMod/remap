@@ -23,13 +23,12 @@ import java.util.*
 
 internal class PsiMapper(private val map: MappingSet, private val file: PsiFile) {
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
-    private var error: Boolean = false
+    private val errors = mutableListOf<Pair<Int, String>>()
     private val changes = TreeMap<TextRange, String>(Comparator.comparing<TextRange, Int> { it.startOffset })
 
     private fun error(at: PsiElement, message: String) {
         val line = StringUtil.offsetToLineNumber(file.text, at.textOffset)
-        System.err.println(file.name + ":" + line + ": " + message)
-        error = true
+        errors.add(Pair(line, message))
     }
 
     private fun replace(e: PsiElement, with: String) {
@@ -54,15 +53,12 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         return before == null || !before.intersects(range)
     }
 
-    private fun getResult(text: String): String? {
-        if (error) {
-            return null
-        }
+    private fun getResult(text: String): Pair<String, List<Pair<Int, String>>> {
         var result = text
         for ((key, value) in changes.descendingMap()) {
             result = key.replace(result, value)
         }
-        return result
+        return Pair(result, errors)
     }
 
     private fun map(expr: PsiElement, field: PsiField) {
@@ -427,7 +423,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         })
     }
 
-    fun remapFile(bindingContext: BindingContext): String? {
+    fun remapFile(bindingContext: BindingContext): Pair<String, List<Pair<Int, String>>> {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
