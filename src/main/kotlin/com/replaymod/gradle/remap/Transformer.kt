@@ -64,8 +64,10 @@ class Transformer(private val map: MappingSet) {
                     EnvironmentConfigFiles.JVM_CONFIG_FILES
             )
             val rootArea = Extensions.getRootArea()
-            if (!rootArea.hasExtensionPoint(CustomExceptionHandler.KEY)) {
-                rootArea.registerExtensionPoint(CustomExceptionHandler.KEY.name, CustomExceptionHandler::class.java.name, ExtensionPoint.Kind.INTERFACE)
+            synchronized(rootArea) {
+                if (!rootArea.hasExtensionPoint(CustomExceptionHandler.KEY)) {
+                    rootArea.registerExtensionPoint(CustomExceptionHandler.KEY.name, CustomExceptionHandler::class.java.name, ExtensionPoint.Kind.INTERFACE)
+                }
             }
 
             val project = environment.project as MockProject
