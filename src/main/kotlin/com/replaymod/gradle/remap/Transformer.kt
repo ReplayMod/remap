@@ -44,6 +44,7 @@ class Transformer(private val map: MappingSet) {
     @Throws(IOException::class)
     fun remap(sources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
         val tmpDir = Files.createTempDirectory("remap")
+        val disposable = Disposer.newDisposable()
         try {
             for ((unitName, source) in sources) {
                 val path = tmpDir.resolve(unitName)
@@ -59,7 +60,7 @@ class Transformer(private val map: MappingSet) {
             config.put<MessageCollector>(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, true))
 
             val environment = KotlinCoreEnvironment.createForProduction(
-                    Disposer.newDisposable(),
+                    disposable,
                     config,
                     EnvironmentConfigFiles.JVM_CONFIG_FILES
             )
@@ -100,6 +101,7 @@ class Transformer(private val map: MappingSet) {
             return results
         } finally {
             Files.walk(tmpDir).map<File> { it.toFile() }.sorted(Comparator.reverseOrder()).forEach { it.delete() }
+            Disposer.dispose(disposable)
         }
     }
 
