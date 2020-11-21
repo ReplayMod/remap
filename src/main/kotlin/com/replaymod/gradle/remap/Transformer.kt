@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.com.intellij.psi.PsiManager
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
+import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.psi.KtFile
 import java.io.BufferedReader
 import java.io.File
@@ -58,6 +59,9 @@ class Transformer(private val map: MappingSet) {
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, KotlinSourceRoot(tmpDir.toAbsolutePath().toString(), false))
             config.addAll<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, classpath!!.map { JvmClasspathRoot(File(it)) })
             config.put<MessageCollector>(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, true))
+
+            // Our PsiMapper only works with the PSI tree elements, not with the faster (but kotlin-specific) classes
+            config.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true)
 
             val environment = KotlinCoreEnvironment.createForProduction(
                     disposable,
