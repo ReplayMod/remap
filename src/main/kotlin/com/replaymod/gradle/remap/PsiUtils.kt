@@ -7,6 +7,7 @@ import org.cadixdev.bombe.type.ObjectType
 import org.cadixdev.bombe.type.Type
 import org.cadixdev.bombe.type.VoidType
 import org.cadixdev.bombe.type.signature.MethodSignature
+import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil
@@ -16,6 +17,19 @@ internal val PsiClass.dollarQualifiedName: String? get() {
     val parentName = parent.dollarQualifiedName ?: return qualifiedName
     val selfName = name ?: return qualifiedName
     return "$parentName$$selfName"
+}
+
+internal val PsiNameValuePair.resolvedLiteralValue: Pair<PsiLiteralExpression, String>? get () {
+    var value: PsiElement? = value
+    while (value is PsiReferenceExpression) {
+        val resolved = value.resolve()
+        value = when (resolved) {
+            is PsiField -> resolved.initializer
+            else -> resolved
+        }
+    }
+    val literal = value as? PsiLiteralExpression ?: return null
+    return Pair(literal, StringUtil.unquoteString(literal.text))
 }
 
 internal object PsiUtils {

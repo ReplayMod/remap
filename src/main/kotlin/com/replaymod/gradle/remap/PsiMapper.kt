@@ -298,7 +298,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                 for (attribute in annotation.parameterList.attributes) {
                     if ("method" != attribute.name) continue
                     // Note: mixin supports multiple targets, we do not (yet)
-                    val literalValue = attribute.literalValue ?: continue
+                    val (literalExpr, literalValue) = attribute.resolvedLiteralValue ?: continue
                     val methodMapping = if ('(' in literalValue) {
                         val signature = MethodSignature.of(literalValue)
                         // mapping.findMethodMapping(signature)
@@ -323,8 +323,7 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
                     }
 
                     if (mapped != literalValue) {
-                        val value = attribute.value!!
-                        replace(value, '"'.toString() + mapped + '"'.toString())
+                        replace(literalExpr, '"'.toString() + mapped + '"'.toString())
                     }
                 }
             }
@@ -418,10 +417,9 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
                 for (attribute in annotation.parameterList.attributes) {
                     if ("target" != attribute.name) continue
-                    val signature = attribute.literalValue ?: continue
+                    val (value, signature) = attribute.resolvedLiteralValue ?: continue
                     val newSignature = remapMixinTarget(signature)
                     if (newSignature != signature) {
-                        val value = attribute.value!!
                         replace(value, "\"$newSignature\"")
                     }
                 }
