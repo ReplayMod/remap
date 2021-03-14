@@ -41,9 +41,14 @@ import kotlin.system.exitProcess
 
 class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
+    var patternAnnotation: String? = null
 
     @Throws(IOException::class)
-    fun remap(sources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
+    fun remap(sources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> =
+            remap(sources, emptyMap())
+
+    @Throws(IOException::class)
+    fun remap(sources: Map<String, String>, processedSource: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
         val tmpDir = Files.createTempDirectory("remap")
         val disposable = Disposer.newDisposable()
         try {
@@ -90,13 +95,29 @@ class Transformer(private val map: MappingSet) {
                     { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
             )
 
+            val patterns = patternAnnotation?.let { annotationFQN ->
+                val patterns = PsiPatterns(annotationFQN)
+                val annotationName = annotationFQN.substring(annotationFQN.lastIndexOf('.') + 1)
+                for ((unitName, source) in sources) {
+                    if (!source.contains(annotationName)) continue
+                    try {
+                        val patternFile = vfs.findFileByIoFile(tmpDir.resolve(unitName).toFile())!!
+                        val patternPsiFile = psiManager.findFile(patternFile)!!
+                        patterns.read(patternPsiFile, processedSource[unitName]!!)
+                    } catch (e: Exception) {
+                        throw RuntimeException("Failed to read patterns from file \"$unitName\".", e)
+                    }
+                }
+                patterns
+            }
+
             val results = HashMap<String, Pair<String, List<Pair<Int, String>>>>()
             for (name in sources.keys) {
                 val file = vfs.findFileByIoFile(tmpDir.resolve(name).toFile())!!
                 val psiFile = psiManager.findFile(file)!!
 
                 val mapped = try {
-                    PsiMapper(map, psiFile).remapFile(analysis.bindingContext)
+                    PsiMapper(map, psiFile, patterns).remapFile(analysis.bindingContext)
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
                 }

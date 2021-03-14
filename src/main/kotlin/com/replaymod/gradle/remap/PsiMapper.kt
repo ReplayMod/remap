@@ -21,7 +21,11 @@ import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameByGetMethodName
 import java.util.*
 
-internal class PsiMapper(private val map: MappingSet, private val file: PsiFile) {
+internal class PsiMapper(
+        private val map: MappingSet,
+        private val file: PsiFile,
+        private val patterns: PsiPatterns?
+) {
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val errors = mutableListOf<Pair<Int, String>>()
     private val changes = TreeMap<TextRange, String>(Comparator.comparing<TextRange, Int> { it.startOffset })
@@ -31,8 +35,9 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         errors.add(Pair(line, message))
     }
 
-    private fun replace(e: PsiElement, with: String) {
-        changes[e.textRange] = with
+    private fun replace(e: PsiElement, with: String) = replace(e.textRange, with)
+    private fun replace(textRange: TextRange, with: String) {
+        changes[textRange] = with
     }
 
     private fun replaceIdentifier(parent: PsiElement, with: String) {
@@ -49,8 +54,17 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
 
     private fun valid(e: PsiElement): Boolean {
         val range = e.textRange
+        // FIXME This implementation is technically wrong but some parts of the
+        //       remapper now rely on that, so fixing it is non-trivial.
+        //       For a proper implementation see the TextRange version below.
         val before = changes.ceilingKey(range)
         return before == null || !before.intersects(range)
+    }
+
+    private fun valid(range: TextRange): Boolean {
+        val before = changes.floorKey(range) ?: TextRange.EMPTY_RANGE
+        val after = changes.ceilingKey(range) ?: TextRange.EMPTY_RANGE
+        return !before.intersectsStrict(range) && !after.intersectsStrict(range)
     }
 
     private fun getResult(text: String): Pair<String, List<Pair<Int, String>>> {
@@ -427,7 +441,32 @@ internal class PsiMapper(private val map: MappingSet, private val file: PsiFile)
         })
     }
 
+    private fun applyPatternMatch(matcher: PsiPattern.Matcher) {
+        val changes = matcher.toChanges()
+        if (changes.all { valid(it.first) }) {
+            changes.forEach { (range, text) -> replace(range, text)}
+        } else if (changes.any { it.first !in this.changes }) {
+            System.err.println("Conflicting pattern changes in $file")
+            System.err.println("Proposed changes:")
+            changes.forEach { println("${it.first}: \"${it.second}\" (${if (valid(it.first)) "accepted" else "rejected"})") }
+            System.err.println("Current changes:")
+            this.changes.forEach { println("${it.key}: \"${it.value}\"") }
+        }
+    }
+
     fun remapFile(bindingContext: BindingContext): Pair<String, List<Pair<Int, String>>> {
+        if (patterns != null) {
+            file.accept(object : JavaRecursiveElementVisitor() {
+                override fun visitCodeBlock(block: PsiCodeBlock) {
+                    patterns.find(block).forEach { applyPatternMatch(it) }
+                }
+
+                override fun visitExpression(expression: PsiExpression) {
+                    patterns.find(expression).forEach { applyPatternMatch(it) }
+                }
+            })
+        }
+
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
