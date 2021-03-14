@@ -2,7 +2,7 @@
 To support multiple Minecraft versions with the ReplayMod, a preprocessor is used which transforms source code to compile against different Minecraft versions.
 
 To keep preprocessor statements to a minimum and support changes in mapping (of originally obfuscated Minecraft names), the preprocessor additionally supports
-source remapping of class, method and field names implemented in the application through use of an embedded IntelliJ IDEA (from kotlin-compiler to be precise, though Kotlin support has yet to to implemented).
+source remapping of class, method and field names implemented in the application through use of an embedded IntelliJ IDEA (Java and Kotlin sources are supported).
 
 This is not integrated into the preprocessor itself for essentially two (now historical) reasons:
 - License incompatibility between the GPL used in the ReplayMod (and the preprocessor) and the EPL used by the JDT
