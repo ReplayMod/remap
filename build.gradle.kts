@@ -17,9 +17,9 @@ repositories {
 }
 
 dependencies {
-    compile("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.3.72")
+    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.3.72")
     implementation(kotlin("stdlib"))
-    compile("org.cadixdev:lorenz:0.5.0")
+    api("org.cadixdev:lorenz:0.5.0")
 }
 
 tasks.named<Jar>("jar") {
