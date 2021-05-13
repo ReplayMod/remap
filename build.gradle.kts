@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.3.40"
+    kotlin("jvm") version "1.5.0"
     `maven-publish`
 }
 
@@ -17,7 +17,7 @@ repositories {
 }
 
 dependencies {
-    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.3.72")
+    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.0")
     implementation(kotlin("stdlib"))
     api("org.cadixdev:lorenz:0.5.0")
 }
