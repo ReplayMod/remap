@@ -38,7 +38,8 @@ internal class PsiPatterns(private val annotationFQN: String) {
         }
         val replacementBody = replacementMethod.body!!
 
-        if (method.text == replacementMethod.text) return
+        // If the body does not change, then there is no point in applying this pattern
+        if (body.text == replacementBody.text) return
 
         // If either body is empty, then consider the pattern to be disabled
         if (body.statements.isEmpty()) return
