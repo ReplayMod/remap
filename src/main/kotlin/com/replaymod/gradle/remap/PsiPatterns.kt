@@ -36,10 +36,15 @@ internal class PsiPatterns(private val annotationFQN: String) {
                 candidates.firstOrNull()
             } ?: throw RuntimeException("Failed to find updated method \"${method.name}\" (line ${methodLine + 1})")
         }
+        val replacementBody = replacementMethod.body!!
 
         if (method.text == replacementMethod.text) return
 
-        val replacementExpression = when (val statement = replacementMethod.body!!.statements.last()) {
+        // If either body is empty, then consider the pattern to be disabled
+        if (body.statements.isEmpty()) return
+        if (replacementBody.statements.isEmpty()) return
+
+        val replacementExpression = when (val statement = replacementBody.statements.last()) {
             is PsiReturnStatement -> statement.returnValue!!
             else -> statement
         }
