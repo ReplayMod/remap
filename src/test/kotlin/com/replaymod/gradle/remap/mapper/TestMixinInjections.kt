@@ -99,4 +99,42 @@ class TestMixinInjections {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps qualified method argument without mappings for target`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "unmappedOverloaded(La/pkg/A;)V")
+                private void test() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "unmappedOverloaded(Lb/pkg/B;)V")
+                private void test() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
+    fun `remaps constructor target`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "<init>()V")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "<init>(La/pkg/A;)V")
+                private void testArg() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "<init>()V")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "<init>(Lb/pkg/B;)V")
+                private void testArg() {}
+            }
+        """.trimIndent()
+    }
 }

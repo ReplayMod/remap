@@ -3,6 +3,12 @@ package b.pkg;
 public class B extends BParent implements BInterface {
     private int bField;
 
+    public B() {
+    }
+
+    public B(B arg) {
+    }
+
     public void bMethod() {
     }
 
@@ -19,6 +25,12 @@ public class B extends BParent implements BInterface {
     }
 
     public void commonOverloaded(B arg) {
+    }
+
+    public void unmappedOverloaded(Object arg) {
+    }
+
+    public void unmappedOverloaded(B arg) {
     }
 
     @Override

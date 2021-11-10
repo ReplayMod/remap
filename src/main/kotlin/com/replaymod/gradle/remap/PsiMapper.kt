@@ -339,14 +339,15 @@ internal class PsiMapper(
                             }}")
                         }
                         targetMethods.firstOrNull()
-                    } ?: continue
-                    val mappedName = findMapping(targetMethod)?.deobfuscatedName ?: continue
+                    }
+                    val mappedName = targetMethod?.let(::findMapping)?.deobfuscatedName ?: targetName
 
                     val ambiguousName = mapping.methodMappings.count { it.deobfuscatedName == mappedName } > 1
-                    val mapped = mappedName + if (ambiguousName) {
-                        remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
-                    } else {
-                        ""
+                    val mapped = mappedName + when {
+                        ambiguousName && targetMethod != null ->
+                            remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
+                        targetDesc != null -> remapMethodDesc(targetDesc)
+                        else -> ""
                     }
 
                     if (mapped != literalValue) {
