@@ -6,8 +6,7 @@ import org.cadixdev.lorenz.impl.MappingSetModelFactoryImpl
 import org.cadixdev.lorenz.impl.model.TopLevelClassMappingImpl
 import org.cadixdev.lorenz.model.MethodMapping
 import org.cadixdev.lorenz.model.TopLevelClassMapping
-
-import java.util.Optional
+import java.util.*
 
 class LegacyMappingSetModelFactory : MappingSetModelFactoryImpl() {
     override fun createTopLevelClassMapping(parent: MappingSet, obfuscatedName: String, deobfuscatedName: String): TopLevelClassMapping {
@@ -23,7 +22,7 @@ class LegacyMappingSetModelFactory : MappingSetModelFactoryImpl() {
 
             override fun getMethodMapping(signature: MethodSignature): Optional<MethodMapping> {
                 var maybeMapping = super.getMethodMapping(signature)
-                if (!maybeMapping.isPresent || !maybeMapping.get().hasMappings()) {
+                if (!maybeMapping.isPresent || maybeMapping.get().let { it.signature == it.deobfuscatedSignature }) {
                     maybeMapping = super.getMethodMapping(stripDesc(signature))
                 }
                 return maybeMapping
