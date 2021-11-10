@@ -6,6 +6,7 @@ MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
 MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V
 MD: a/pkg/A/commonOverloaded (Ljava/lang/Object;)V b/pkg/B/commonOverloaded (Ljava/lang/Object;)V
 MD: a/pkg/A/commonOverloaded (La/pkg/A;)V b/pkg/B/commonOverloaded (La/pkg/B;)V
+CL: a/pkg/A$1 b/pkg/B$1
 CL: a/pkg/A$Inner b/pkg/B$Inner
 FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
 CL: a/pkg/AParent b/pkg/BParent

@@ -35,6 +35,7 @@ public class B extends BParent implements BInterface {
 
     @Override
     public void bInterfaceMethod() {
+        new B() {};
     }
 
     public class Inner {

@@ -49,4 +49,15 @@ class TestMixinAnnotation {
             class MixinA { @Shadow private int bField; }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps with anonymous inner class target`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(targets = "a.pkg.A${'$'}1")
+            class MixinA {}
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(targets = "b.pkg.B${'$'}1")
+            class MixinA {}
+        """.trimIndent()
+    }
 }

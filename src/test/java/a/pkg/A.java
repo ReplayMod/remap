@@ -35,6 +35,7 @@ public class A extends AParent implements AInterface {
 
     @Override
     public void aInterfaceMethod() {
+        new A() {};
     }
 
     public class Inner {
