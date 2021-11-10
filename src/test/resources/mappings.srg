@@ -1,0 +1,13 @@
+CL: a/pkg/A b/pkg/B
+FD: a/pkg/A/aField b/pkg/B/bField
+MD: a/pkg/A/aMethod ()V b/pkg/B/bMethod ()V
+MD: a/pkg/A/aOverloaded ()V b/pkg/B/bOverloaded ()V
+MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
+MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V
+MD: a/pkg/A/commonOverloaded (Ljava/lang/Object;)V b/pkg/B/commonOverloaded (Ljava/lang/Object;)V
+MD: a/pkg/A/commonOverloaded (La/pkg/A;)V b/pkg/B/commonOverloaded (La/pkg/B;)V
+CL: a/pkg/A$Inner b/pkg/B$Inner
+FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
+CL: a/pkg/AParent b/pkg/BParent
+CL: a/pkg/AInterface b/pkg/BInterface
+MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V
