@@ -13,12 +13,16 @@ class TestMixinInjections {
             class MixinA {
                 @$annotation(method = "aMethod")
                 private void test() {}
+                @$annotation(method = "aInterfaceMethod")
+                private void testInterface() {}
             }
         """.trimIndent()) shouldBe """
             @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
             class MixinA {
                 @$annotation(method = "bMethod")
                 private void test() {}
+                @$annotation(method = "bInterfaceMethod")
+                private void testInterface() {}
             }
         """.trimIndent()
     }

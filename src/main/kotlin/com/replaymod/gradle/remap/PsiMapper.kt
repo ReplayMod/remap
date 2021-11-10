@@ -4,12 +4,15 @@ import com.replaymod.gradle.remap.PsiUtils.getSignature
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.model.ClassMapping
+import org.cadixdev.lorenz.model.MethodMapping
 import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
 import org.jetbrains.kotlin.com.intellij.lang.ASTNode
 import org.jetbrains.kotlin.com.intellij.lang.jvm.JvmModifier
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.com.intellij.psi.util.ClassUtil
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
 import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
@@ -106,7 +109,7 @@ internal class PsiMapper(
             return
         }
 
-        val mapped = findMapping(method)
+        val mapped = findMapping(method)?.deobfuscatedName
         if (mapped != null && mapped != method.name) {
             val maybeGetter = propertyNameByGetMethodName(Name.identifier(mapped))
             if (maybeGetter != null // must have getter-style name
@@ -130,7 +133,7 @@ internal class PsiMapper(
 
     private fun map(expr: PsiElement, method: KtNamedFunction) {
         val psiMethod = method.getRepresentativeLightMethod()
-        val mapped = findMapping(psiMethod ?: return)
+        val mapped = findMapping(psiMethod ?: return)?.deobfuscatedName
         if (mapped != null && mapped != method.name) {
             replaceIdentifier(expr, mapped)
         }
@@ -138,7 +141,7 @@ internal class PsiMapper(
 
     private fun map(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
         val getter = property.getMethod.findPsi() as? PsiMethod ?: return
-        val mappedGetter = findMapping(getter) ?: return
+        val mappedGetter = findMapping(getter)?.deobfuscatedName ?: return
         if (mappedGetter != getter.name) {
             val maybeMapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))
             if (maybeMapped == null) {
@@ -165,7 +168,7 @@ internal class PsiMapper(
         }
     }
 
-    private fun findMapping(method: PsiMethod): String? {
+    private fun findMapping(method: PsiMethod): MethodMapping? {
         var declaringClass: PsiClass? = method.containingClass ?: return null
         val parentQueue = ArrayDeque<PsiClass>()
         parentQueue.offer(declaringClass)
@@ -177,7 +180,7 @@ internal class PsiMapper(
         }
         while (true) {
             if (mapping != null) {
-                val mapped = mapping.findMethodMapping(getSignature(method))?.deobfuscatedName
+                val mapped = mapping.findMethodMapping(getSignature(method))
                 if (mapped != null) {
                     return mapped
                 }
@@ -236,7 +239,7 @@ internal class PsiMapper(
     }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun getMixinTarget(annotation: PsiAnnotation): ClassMapping<*, *>? {
+    private fun getMixinTarget(annotation: PsiAnnotation): Pair<PsiClass, ClassMapping<*, *>>? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -244,8 +247,10 @@ internal class PsiMapper(
                 if (value !is PsiClassObjectAccessExpression) continue
                 val type = value.operand
                 val reference = type.innermostComponentReferenceElement ?: continue
-                val qualifiedName = (reference.resolve() as PsiClass?)?.dollarQualifiedName ?: continue
-                return map.findClassMapping(qualifiedName) ?: continue
+                val psiClass = reference.resolve() as PsiClass? ?: continue
+                val qualifiedName = psiClass.dollarQualifiedName ?: continue
+                val mapping = map.findClassMapping(qualifiedName) ?: continue
+                return Pair(psiClass, mapping)
             }
             if ("targets" == name) {
                 val value = pair.value
@@ -256,7 +261,11 @@ internal class PsiMapper(
                 if (mapped != qualifiedName) {
                     replace(value, "\"$mapped\"")
                 }
-                return mapping
+                val psiClass = JavaPsiFacade.getInstance(file.project).findClass(
+                    qualifiedName.replace('$', '.'),
+                    GlobalSearchScope.allScope(file.project),
+                ) ?: continue
+                return Pair(psiClass, mapping)
             }
         }
         return null
@@ -298,7 +307,7 @@ internal class PsiMapper(
         })
     }
 
-    private fun remapMixinInjections(mapping: ClassMapping<*, *>) {
+    private fun remapMixinInjections(targetClass: PsiClass, mapping: ClassMapping<*, *>) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 val annotation = method.getAnnotation(CLASS_INJECT)
@@ -313,25 +322,29 @@ internal class PsiMapper(
                     if ("method" != attribute.name) continue
                     // Note: mixin supports multiple targets, we do not (yet)
                     val (literalExpr, literalValue) = attribute.resolvedLiteralValue ?: continue
-                    val methodMapping = if ('(' in literalValue) {
-                        val signature = MethodSignature.of(literalValue)
-                        // mapping.findMethodMapping(signature)
-                        // TODO for some reason above doesn't work (probably related to legacy mappings) but below does
-                        mapping.methodMappings.find { it.signature == signature }
+                    val (targetName, targetDesc) = if ('(' in literalValue) {
+                        MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
                     } else {
-                        val mappings = mapping.methodMappings.filter { it.obfuscatedName == literalValue }
-                        if (mappings.size > 1) {
-                            error(attribute, "Ambiguous mixin method \"$literalValue\" may refer to any of: ${mappings.joinToString { "\"$it\"" }}")
-                        }
-                        mappings.firstOrNull()
-                    } ?: continue
-
-                    val ambiguousName = mapping.methodMappings.any {
-                        it != methodMapping && it.deobfuscatedName == methodMapping.deobfuscatedName
+                        literalValue to null
                     }
-                    val mappedSignature = methodMapping.deobfuscatedSignature
-                    val mapped = mappedSignature.name + if (ambiguousName) {
-                        mappedSignature.descriptor
+                    val targetMethods = targetClass.findMethodsByName(targetName, false)
+                    val targetMethod = if (targetDesc != null) {
+                        targetMethods.find {
+                            ClassUtil.getAsmMethodSignature(it) == targetDesc
+                        }
+                    } else {
+                        if (targetMethods.size > 1) {
+                            error(attribute, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString { 
+                                "\"${it.name}${ClassUtil.getAsmMethodSignature(it)}\"" 
+                            }}")
+                        }
+                        targetMethods.firstOrNull()
+                    } ?: continue
+                    val mappedName = findMapping(targetMethod)?.deobfuscatedName ?: continue
+
+                    val ambiguousName = mapping.methodMappings.count { it.deobfuscatedName == mappedName } > 1
+                    val mapped = mappedName + if (ambiguousName) {
+                        remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
                     } else {
                         ""
                     }
@@ -421,6 +434,9 @@ internal class PsiMapper(
         return builder.toString()
     }
 
+    private fun remapMethodDesc(desc: String): String =
+        remapFullyQualifiedMethodOrField("Ldummy;dummy$desc").dropWhile { it != '(' }
+
     private fun remapAtTargets() {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitAnnotation(annotation: PsiAnnotation) {
@@ -473,7 +489,7 @@ internal class PsiMapper(
 
                 remapAtTargets()
 
-                val mapping = getMixinTarget(annotation) ?: return
+                val (targetClass, mapping) = getMixinTarget(annotation) ?: return
 
                 mixinMappings[psiClass.qualifiedName!!] = mapping
 
@@ -481,7 +497,7 @@ internal class PsiMapper(
                     remapAccessors(mapping)
                 }
                 if (!mapping.methodMappings.isEmpty()) {
-                    remapMixinInjections(mapping)
+                    remapMixinInjections(targetClass, mapping)
                 }
             }
         })
