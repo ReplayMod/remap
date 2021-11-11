@@ -1,6 +1,7 @@
 package a.pkg;
 
 public class A extends AParent implements AInterface {
+    private A a;
     private int aField;
 
     public A() {
@@ -11,6 +12,10 @@ public class A extends AParent implements AInterface {
 
     public void aMethod() {
         aInterfaceMethod();
+    }
+
+    public A getA() {
+        return this;
     }
 
     public void aOverloaded() {

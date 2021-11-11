@@ -1,6 +1,8 @@
 CL: a/pkg/A b/pkg/B
+FD: a/pkg/A/a b/pkg/B/b
 FD: a/pkg/A/aField b/pkg/B/bField
 MD: a/pkg/A/aMethod ()V b/pkg/B/bMethod ()V
+MD: a/pkg/A/getA ()La/pkg/A; b/pkg/B/getB ()Lb/pkg/B;
 MD: a/pkg/A/aOverloaded ()V b/pkg/B/bOverloaded ()V
 MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
 MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V
@@ -12,5 +14,6 @@ FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
 CL: a/pkg/A$InnerA b/pkg/B$InnerB
 CL: a/pkg/A$GenericA b/pkg/B$GenericB
 CL: a/pkg/AParent b/pkg/BParent
+MD: a/pkg/AParent/aParentMethod ()V b/pkg/BParent/bParentMethod ()V
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V

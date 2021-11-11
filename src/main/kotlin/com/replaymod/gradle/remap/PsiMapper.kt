@@ -169,7 +169,15 @@ internal class PsiMapper(
 
         var name = declaringClass!!.qualifiedName
         if (name != null) {
+            // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
             mapping = mixinMappings[name]
+            // but only if the method conceptually belongs to the target class
+            val isShadow = method.getAnnotation(CLASS_SHADOW) != null
+            val isOverwrite = method.getAnnotation(CLASS_OVERWRITE) != null
+            val isOverride = method.getAnnotation(CLASS_OVERRIDE) != null
+            if (mapping != null && !isShadow && !isOverwrite && !isOverride) {
+                return null // otherwise, it belongs to the mixin and never gets remapped
+            }
         }
         while (true) {
             if (mapping != null) {
@@ -592,6 +600,8 @@ internal class PsiMapper(
 
     companion object {
         private const val CLASS_MIXIN = "org.spongepowered.asm.mixin.Mixin"
+        private const val CLASS_SHADOW = "org.spongepowered.asm.mixin.Shadow"
+        private const val CLASS_OVERWRITE = "org.spongepowered.asm.mixin.Overwrite"
         private const val CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor"
         private const val CLASS_INVOKER = "org.spongepowered.asm.mixin.gen.Invoker"
         private const val CLASS_AT = "org.spongepowered.asm.mixin.injection.At"
@@ -601,6 +611,7 @@ internal class PsiMapper(
         private const val CLASS_MODIFY_CONSTANT = "org.spongepowered.asm.mixin.injection.ModifyConstant"
         private const val CLASS_MODIFY_VARIABLE = "org.spongepowered.asm.mixin.injection.ModifyVariable"
         private const val CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect"
+        private const val CLASS_OVERRIDE = "java.lang.Override"
 
         private fun isSwitchCase(e: PsiElement): Boolean {
             if (e is PsiSwitchLabelStatement) {

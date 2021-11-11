@@ -62,4 +62,21 @@ class TestMixinAccessors {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `does not change @Accessor method name even when it happens to be the same as a method in the target`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            interface MixinA {
+                @org.spongepowered.asm.mixin.gen.Accessor
+                a.pkg.A getA();
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            interface MixinA {
+                @org.spongepowered.asm.mixin.gen.Accessor("b")
+                b.pkg.B getA();
+            }
+        """.trimIndent()
+    }
 }

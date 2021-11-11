@@ -1,6 +1,7 @@
 package b.pkg;
 
 public class B extends BParent implements BInterface {
+    private B b;
     private int bField;
 
     public B() {
@@ -11,6 +12,10 @@ public class B extends BParent implements BInterface {
 
     public void bMethod() {
         bInterfaceMethod();
+    }
+
+    public B getB() {
+        return this;
     }
 
     public void bOverloaded() {
