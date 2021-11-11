@@ -179,4 +179,31 @@ class TestMixinInjections {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps @At target in constant`() {
+        TestData.remap("""
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                private static final String TARGET = "La/pkg/A;aInterfaceMethod()V";
+                @Inject(method = "aMethod", at = @At(target = TARGET))
+                private void test1() {}
+                @Inject(method = "aMethod", at = @At(target = TARGET))
+                private void test2() {}
+            }
+        """.trimIndent()) shouldBe """
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                private static final String TARGET = "Lb/pkg/B;bInterfaceMethod()V";
+                @Inject(method = "bMethod", at = @At(target = TARGET))
+                private void test1() {}
+                @Inject(method = "bMethod", at = @At(target = TARGET))
+                private void test2() {}
+            }
+        """.trimIndent()
+    }
 }

@@ -473,7 +473,7 @@ internal class PsiMapper(
                     if ("target" != attribute.name) continue
                     val (value, signature) = attribute.resolvedLiteralValue ?: continue
                     val newSignature = remapMixinTarget(signature)
-                    if (newSignature != signature) {
+                    if (newSignature != signature && valid(value)) {
                         replace(value, "\"$newSignature\"")
                     }
                 }
