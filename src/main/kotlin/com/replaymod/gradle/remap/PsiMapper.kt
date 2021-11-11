@@ -55,14 +55,7 @@ internal class PsiMapper(
         }
     }
 
-    private fun valid(e: PsiElement): Boolean {
-        val range = e.textRange
-        // FIXME This implementation is technically wrong but some parts of the
-        //       remapper now rely on that, so fixing it is non-trivial.
-        //       For a proper implementation see the TextRange version below.
-        val before = changes.ceilingKey(range)
-        return before == null || !before.intersects(range)
-    }
+    private fun valid(e: PsiElement): Boolean = valid(e.textRange)
 
     private fun valid(range: TextRange): Boolean {
         val before = changes.floorKey(range) ?: TextRange.EMPTY_RANGE
