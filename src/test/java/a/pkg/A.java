@@ -42,4 +42,9 @@ public class A extends AParent implements AInterface {
     public class Inner {
         private int aField;
     }
+
+    public class InnerA {
+    }
+
+    public class GenericA<T> {}
 }

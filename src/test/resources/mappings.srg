@@ -9,6 +9,8 @@ MD: a/pkg/A/commonOverloaded (La/pkg/A;)V b/pkg/B/commonOverloaded (La/pkg/B;)V
 CL: a/pkg/A$1 b/pkg/B$1
 CL: a/pkg/A$Inner b/pkg/B$Inner
 FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
+CL: a/pkg/A$InnerA b/pkg/B$InnerB
+CL: a/pkg/A$GenericA b/pkg/B$GenericB
 CL: a/pkg/AParent b/pkg/BParent
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V

@@ -45,4 +45,7 @@ object TestData {
 
     fun remap(content: String): String = transformer.remap(mapOf("test.java" to content))["test.java"]!!.first
     fun remapWithErrors(content: String) = transformer.remap(mapOf("test.java" to content))["test.java"]!!
+
+    fun remapKt(content: String): String = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!.first
+    fun remapKtWithErrors(content: String) = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!
 }

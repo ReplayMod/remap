@@ -219,7 +219,9 @@ internal class PsiMapper(
         }
         val parent: PsiElement? = expr.parent
         if ((parent is KtUserType || parent is KtQualifiedExpression) && parent.text == name) {
-            replace(parent, mapped)
+            if (valid(parent)) {
+                replace(parent, mapped)
+            }
             return
         }
         // FIXME this incorrectly filters things like "Packet<?>" and doesn't filter same-name type aliases
@@ -547,6 +549,24 @@ internal class PsiMapper(
                         map(function, function)
                     }
                     return super.visitNamedFunction(function, data)
+                }
+
+                override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Void?): Void? {
+                    // Dot qualified expressions such as "a.pkg.A.Inner" we want to remap back to front because the
+                    // latter parts are more specific.
+                    // I.e. we start with the inner class, and only if there is no mapping for that, do we try to remap
+                    // the outer class.
+                    expression.selectorExpression?.accept(this)
+                    expression.receiverExpression.accept(this)
+                    return null
+                }
+
+                override fun visitUserType(type: KtUserType, data: Void?): Void? {
+                    // Same as visitDotQualifiedExpression but for typealias declarations
+                    type.referenceExpression?.accept(this)
+                    type.qualifier?.accept(this)
+                    type.typeArgumentList?.accept(this)
+                    return null
                 }
 
                 override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {

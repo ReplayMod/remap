@@ -42,4 +42,9 @@ public class B extends BParent implements BInterface {
     public class Inner {
         private int bField;
     }
+
+    public class InnerB {
+    }
+
+    public class GenericB<T> {}
 }
