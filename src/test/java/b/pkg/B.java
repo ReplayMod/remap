@@ -20,6 +20,48 @@ public class B extends BParent implements BInterface {
         return this;
     }
 
+    public B getSyntheticB() {
+        return this;
+    }
+
+    public void setSyntheticB(B arg) {
+    }
+
+    public boolean isSyntheticBooleanB() {
+        return false;
+    }
+
+    public void setSyntheticBooleanB(boolean arg) {
+    }
+
+    public B getNonSyntheticB() {
+        return this;
+    }
+
+    public void setNonSyntheticB(B arg) {
+    }
+
+    public boolean isNonSyntheticBooleanB() {
+        return false;
+    }
+
+    public void setNonSyntheticBooleanB(boolean arg) {
+    }
+
+    public B getterB() {
+        return this;
+    }
+
+    public void setterB(B arg) {
+    }
+
+    public boolean getterBooleanB() {
+        return false;
+    }
+
+    public void setterBooleanB(boolean arg) {
+    }
+
     public void bOverloaded() {
     }
 

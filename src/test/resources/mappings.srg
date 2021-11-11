@@ -3,6 +3,18 @@ FD: a/pkg/A/a b/pkg/B/b
 FD: a/pkg/A/aField b/pkg/B/bField
 MD: a/pkg/A/aMethod ()V b/pkg/B/bMethod ()V
 MD: a/pkg/A/getA ()La/pkg/A; b/pkg/B/getB ()Lb/pkg/B;
+MD: a/pkg/A/getSyntheticA ()La/pkg/A; b/pkg/B/getSyntheticB ()Lb/pkg/B;
+MD: a/pkg/A/setSyntheticA (La/pkg/A;)V; b/pkg/B/setSyntheticB (Lb/pkg/B;)V;
+MD: a/pkg/A/isSyntheticBooleanA ()Z; b/pkg/B/isSyntheticBooleanB ()Z;
+MD: a/pkg/A/setSyntheticBooleanA (Z)V; b/pkg/B/setSyntheticBooleanB (Z)V;
+MD: a/pkg/A/getNonSyntheticA ()La/pkg/A; b/pkg/B/getterB ()Lb/pkg/B;
+MD: a/pkg/A/setNonSyntheticA (La/pkg/A;)V; b/pkg/B/setterB (Lb/pkg/B;)V;
+MD: a/pkg/A/isNonSyntheticBooleanA ()Z; b/pkg/B/getterBooleanB ()Z;
+MD: a/pkg/A/setNonSyntheticBooleanA (Z)V; b/pkg/B/setterBooleanB (Z)V;
+MD: a/pkg/A/getterA ()La/pkg/A; b/pkg/B/getNonSyntheticB ()Lb/pkg/B;
+MD: a/pkg/A/setterA (La/pkg/A;)V; b/pkg/B/setNonSyntheticB (Lb/pkg/B;)V;
+MD: a/pkg/A/getterBooleanA ()Z; b/pkg/B/isNonSyntheticBooleanB ()Z;
+MD: a/pkg/A/setterBooleanA (Z)V; b/pkg/B/setNonSyntheticBooleanB (Z)V;
 MD: a/pkg/A/aOverloaded ()V b/pkg/B/bOverloaded ()V
 MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
 MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V

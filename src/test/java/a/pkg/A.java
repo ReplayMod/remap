@@ -20,6 +20,48 @@ public class A extends AParent implements AInterface {
         return this;
     }
 
+    public A getSyntheticA() {
+        return this;
+    }
+
+    public void setSyntheticA(A arg) {
+    }
+
+    public boolean isSyntheticBooleanA() {
+        return false;
+    }
+
+    public void setSyntheticBooleanA(boolean arg) {
+    }
+
+    public A getNonSyntheticA() {
+        return this;
+    }
+
+    public void setNonSyntheticA(A arg) {
+    }
+
+    public boolean isNonSyntheticBooleanA() {
+        return false;
+    }
+
+    public void setNonSyntheticBooleanA(boolean arg) {
+    }
+
+    public A getterA() {
+        return this;
+    }
+
+    public void setterA(A arg) {
+    }
+
+    public boolean getterBooleanA() {
+        return false;
+    }
+
+    public void setterBooleanA(boolean arg) {
+    }
+
     public void aOverloaded() {
     }
 
