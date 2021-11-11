@@ -10,6 +10,8 @@ public class B extends BParent implements BInterface {
     public B(B arg) {
     }
 
+    public static B create() { return new B(); }
+
     public void bMethod() {
         bInterfaceMethod();
     }

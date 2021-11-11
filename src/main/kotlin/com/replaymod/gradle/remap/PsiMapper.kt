@@ -31,7 +31,7 @@ internal class PsiMapper(
 ) {
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val errors = mutableListOf<Pair<Int, String>>()
-    private val changes = TreeMap<TextRange, String>(Comparator.comparing<TextRange, Int> { it.startOffset })
+    private val changes = TreeMap<TextRange, String>(compareBy<TextRange> { it.startOffset }.thenBy { it.endOffset })
 
     private fun error(at: PsiElement, message: String) {
         val line = StringUtil.offsetToLineNumber(file.text, at.textOffset)
@@ -40,7 +40,13 @@ internal class PsiMapper(
 
     private fun replace(e: PsiElement, with: String) = replace(e.textRange, with)
     private fun replace(textRange: TextRange, with: String) {
-        changes[textRange] = with
+        changes.compute(textRange) { _, replacement ->
+            if (replacement != null) {
+                replacement + with
+            } else {
+                with
+            }
+        }
     }
 
     private fun replaceIdentifier(parent: PsiElement, with: String) {

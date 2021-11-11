@@ -10,6 +10,8 @@ public class A extends AParent implements AInterface {
     public A(A arg) {
     }
 
+    public static A create() { return new A(); }
+
     public void aMethod() {
         aInterfaceMethod();
     }

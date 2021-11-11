@@ -41,9 +41,15 @@ object TestData {
             findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
             findClasspathEntry("a.pkg.A"),
         )
+        patternAnnotation = "remap.Pattern"
     }
 
-    fun remap(content: String): String = transformer.remap(mapOf("test.java" to content))["test.java"]!!.first
+    fun remap(content: String, patternsBefore: String = "", patternsAfter: String = ""): String = transformer.remap(mapOf(
+        "test.java" to content,
+        "pattern.java" to "class Patterns {\n$patternsBefore\n}",
+    ), mapOf(
+        "pattern.java" to "class Patterns {\n$patternsAfter\n}",
+    ))["test.java"]!!.first
     fun remapWithErrors(content: String) = transformer.remap(mapOf("test.java" to content))["test.java"]!!
 
     fun remapKt(content: String): String = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!.first
