@@ -10,6 +10,7 @@ public class A extends AParent implements AInterface {
     }
 
     public void aMethod() {
+        aInterfaceMethod();
     }
 
     public void aOverloaded() {

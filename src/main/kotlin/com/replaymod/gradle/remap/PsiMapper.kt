@@ -399,10 +399,24 @@ internal class PsiMapper(
         val name = signature.substring(ownerEnd + 1, argsBegin)
         val returnType = signature.substring(argsEnd + 1)
 
+        val ownerPsi = JavaPsiFacade.getInstance(file.project).findClass(
+            owner.drop(1).dropLast(1).replace('/', '.').replace('$', '.'),
+            GlobalSearchScope.allScope(file.project),
+        )
+        val methodPsi = if (method) {
+            val desc = signature.substring(argsBegin)
+            ownerPsi?.findMethodsByName(name, true)?.find { ClassUtil.getAsmMethodSignature(it) == desc }
+        } else {
+            null
+        }
+
         val builder = StringBuilder(signature.length + 32)
         val mapping = remapInternalType(owner, builder)
         var mapped: String? = null
-        if (mapping != null) {
+        if (methodPsi != null) {
+            mapped = findMapping(methodPsi)?.deobfuscatedName
+        }
+        if (mapped == null && mapping != null) {
             mapped = (if (method) {
                 mapping.findMethodMapping(MethodSignature.of(signature.substring(ownerEnd + 1)))
             } else {

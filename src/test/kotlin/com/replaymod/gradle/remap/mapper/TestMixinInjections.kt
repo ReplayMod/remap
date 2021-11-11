@@ -137,4 +137,46 @@ class TestMixinInjections {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps @At target`() {
+        TestData.remap("""
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @Inject(method = "aMethod", at = @At(target = "La/pkg/A;aInterfaceMethod()V"))
+                private void test() {}
+            }
+        """.trimIndent()) shouldBe """
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;bInterfaceMethod()V"))
+                private void test() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
+    fun `remaps @At target without mappings for target`() {
+        TestData.remap("""
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @Inject(method = "aMethod", at = @At(target = "La/pkg/A;unmappedOverloaded(La/pkg/A;)V"))
+                private void test() {}
+            }
+        """.trimIndent()) shouldBe """
+            import org.spongepowered.asm.mixin.injection.At;
+            import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;unmappedOverloaded(Lb/pkg/B;)V"))
+                private void test() {}
+            }
+        """.trimIndent()
+    }
 }

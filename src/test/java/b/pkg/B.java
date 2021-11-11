@@ -10,6 +10,7 @@ public class B extends BParent implements BInterface {
     }
 
     public void bMethod() {
+        bInterfaceMethod();
     }
 
     public void bOverloaded() {
