@@ -146,7 +146,7 @@ internal class PsiMapper(
             if (maybeMapped == null) {
                 // Can happen if a method is a synthetic property in the current mapping (e.g. `isNonBoss`) but not
                 // in the target mapping (e.g. `canUsePortal()`)
-                // TODO probably also want to convert in the opposite direction, though that's a lot harder
+                // This is the reverse to the operation in [map(PsiElement, PsiMethod)].
                 replaceIdentifier(expr, "$mappedGetter()")
             } else {
                 val mapped = maybeMapped.identifier
