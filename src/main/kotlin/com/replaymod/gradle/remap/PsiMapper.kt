@@ -21,6 +21,7 @@ import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameByGetMethodName
 import java.util.*
@@ -150,7 +151,10 @@ internal class PsiMapper(
     }
 
     private fun map(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
-        val getter = property.getMethod.findPsi() as? PsiMethod ?: return
+        val getter = property.getMethod
+            .overriddenTreeAsSequence(false)
+            .firstNotNullOfOrNull { it.findPsi() }
+                as? PsiMethod ?: return
         val mapping = findMapping(getter)
         val mappedGetter = mapping?.deobfuscatedName ?: return
         if (mappedGetter != getter.name) {

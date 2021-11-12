@@ -141,4 +141,17 @@ class TestKotlinSyntheticProperties {
             val v = B().b
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps synthetic property even when overwritten in kotlin subclass`() {
+        TestData.remapKt("""
+            import pkg.Kt
+            val v = Kt().syntheticA
+            fun test() { Kt().syntheticA = Kt() }
+        """.trimIndent()) shouldBe """
+            import pkg.Kt
+            val v = Kt().syntheticB
+            fun test() { Kt().syntheticB = Kt() }
+        """.trimIndent()
+    }
 }
