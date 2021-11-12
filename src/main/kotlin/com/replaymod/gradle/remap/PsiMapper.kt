@@ -359,7 +359,7 @@ internal class PsiMapper(
                         else -> ""
                     }
 
-                    if (mapped != literalValue) {
+                    if (mapped != literalValue && valid(literalExpr)) {
                         replace(literalExpr, '"'.toString() + mapped + '"'.toString())
                     }
                 }

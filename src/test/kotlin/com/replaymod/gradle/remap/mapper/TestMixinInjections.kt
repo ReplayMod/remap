@@ -139,6 +139,29 @@ class TestMixinInjections {
     }
 
     @Test
+    fun `remaps method in constant`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                private static final String TARGET = "aMethod";
+                @org.spongepowered.asm.mixin.injection.Inject(method = TARGET)
+                private void test1() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = TARGET)
+                private void test2() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                private static final String TARGET = "bMethod";
+                @org.spongepowered.asm.mixin.injection.Inject(method = TARGET)
+                private void test1() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = TARGET)
+                private void test2() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps @At target`() {
         TestData.remap("""
             import org.spongepowered.asm.mixin.injection.At;
