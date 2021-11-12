@@ -67,6 +67,11 @@ public class A extends AParent implements AInterface {
         return conflictingField;
     }
 
+    protected int protectedField;
+    public int getProtectedFieldWithoutConflict() {
+        return protectedField;
+    }
+
     public void aOverloaded() {
     }
 

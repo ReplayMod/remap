@@ -67,6 +67,11 @@ public class B extends BParent implements BInterface {
         return conflictingField;
     }
 
+    protected int protectedField;
+    public int getProtectedFieldWithoutConflict() {
+        return protectedField;
+    }
+
     public void bOverloaded() {
     }
 

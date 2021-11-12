@@ -20,7 +20,11 @@ import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
+import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameByGetMethodName
@@ -30,6 +34,7 @@ internal class PsiMapper(
         private val map: MappingSet,
         private val remappedProject: Project?,
         private val file: PsiFile,
+        private val bindingContext: BindingContext,
         private val patterns: PsiPatterns?
 ) {
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
@@ -128,7 +133,7 @@ internal class PsiMapper(
                     // `super.getDebugInfo()` is a special case which cannot be replaced with a synthetic property
                     && expr.parent.parent.let { it !is KtDotQualifiedExpression || it.firstChild !is KtSuperExpression }
                     // cannot use synthetic properties if there is a field of the same name
-                    && !isSyntheticPropertyShadowedByField(maybeGetter.identifier, mapping)
+                    && !isSyntheticPropertyShadowedByField(maybeGetter.identifier, mapping, expr)
                     // cannot use synthetic properties outside of kotlin files (cause they're a kotlin thing)
                     && expr.containingFile  is KtFile) {
                 // E.g. `entity.canUsePortal()` maps to `entity.isNonBoss()` but when we're using kotlin and the target
@@ -159,7 +164,7 @@ internal class PsiMapper(
         val mappedGetter = mapping?.deobfuscatedName ?: return
         if (mappedGetter != getter.name) {
             val maybeMapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))
-            if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mapping)) {
+            if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mapping, expr)) {
                 // Can happen if a method is a synthetic property in the current mapping (e.g. `isNonBoss`) but not
                 // in the target mapping (e.g. `canUsePortal()`)
                 // This is the reverse to the operation in [map(PsiElement, PsiMethod)].
@@ -263,11 +268,21 @@ internal class PsiMapper(
         }
     }
 
-    private fun isSyntheticPropertyShadowedByField(propertyName: String, mapping: MethodMapping): Boolean {
+    private fun isSyntheticPropertyShadowedByField(propertyName: String, mapping: MethodMapping, expr: PsiElement): Boolean {
         val cls = findPsiClass(mapping.parent.fullDeobfuscatedName, remappedProject ?: file.project) ?: return false
         val field = cls.findFieldByName(propertyName, true) ?: return false
-        return field.hasModifier(JvmModifier.PUBLIC) || field.hasModifier(JvmModifier.PROTECTED)
+
+        val canAccessProtected = expr.getNonStrictParentOfType<KtClassOrObject>()?.extends(
+            mapping.parent.fullObfuscatedName.replace('/', '.')
+        ) == true
+
+        return field.hasModifier(JvmModifier.PUBLIC) || (canAccessProtected && field.hasModifier(JvmModifier.PROTECTED))
     }
+
+    private fun KtClassOrObject.extends(className: String): Boolean =
+        findClassDescriptor(bindingContext)
+            .getAllSuperclassesWithoutAny()
+            .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
     private fun getMixinTarget(annotation: PsiAnnotation): Pair<PsiClass, ClassMapping<*, *>>? {
@@ -510,7 +525,7 @@ internal class PsiMapper(
         }
     }
 
-    fun remapFile(bindingContext: BindingContext): Pair<String, List<Pair<Int, String>>> {
+    fun remapFile(): Pair<String, List<Pair<Int, String>>> {
         if (patterns != null) {
             file.accept(object : JavaRecursiveElementVisitor() {
                 override fun visitCodeBlock(block: PsiCodeBlock) {

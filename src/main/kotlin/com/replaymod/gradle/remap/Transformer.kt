@@ -122,7 +122,7 @@ class Transformer(private val map: MappingSet) {
                 val psiFile = psiManager.findFile(file)!!
 
                 val mapped = try {
-                    PsiMapper(map, remappedProject, psiFile, patterns).remapFile(analysis.bindingContext)
+                    PsiMapper(map, remappedProject, psiFile, analysis.bindingContext, patterns).remapFile()
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
                 }

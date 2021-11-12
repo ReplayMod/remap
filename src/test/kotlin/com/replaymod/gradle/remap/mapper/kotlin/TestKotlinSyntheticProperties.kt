@@ -103,9 +103,15 @@ class TestKotlinSyntheticProperties {
         TestData.remapKt("""
             import a.pkg.A
             val v = A().getConflictingFieldWithoutConflict()
+            class C : A() {
+                val v = getProtectedFieldWithoutConflict()
+            }
         """.trimIndent()) shouldBe """
             import b.pkg.B
             val v = B().getConflictingField()
+            class C : B() {
+                val v = getProtectedField()
+            }
         """.trimIndent()
     }
 
@@ -114,9 +120,11 @@ class TestKotlinSyntheticProperties {
         TestData.remapKt("""
             import a.pkg.A
             val v = A().getA()
+            val v = A().getProtectedFieldWithoutConflict()
         """.trimIndent()) shouldBe """
             import b.pkg.B
             val v = B().b
+            val v = B().protectedField
         """.trimIndent()
     }
 
@@ -125,9 +133,15 @@ class TestKotlinSyntheticProperties {
         TestData.remapKt("""
             import a.pkg.A
             val v = A().conflictingFieldWithoutConflict
+            class C : A() {
+                val v = protectedFieldWithoutConflict
+            }
         """.trimIndent()) shouldBe """
             import b.pkg.B
             val v = B().getConflictingField()
+            class C : B() {
+                val v = getProtectedField()
+            }
         """.trimIndent()
     }
 
@@ -136,9 +150,11 @@ class TestKotlinSyntheticProperties {
         TestData.remapKt("""
             import a.pkg.A
             val v = A().a
+            val v = A().protectedFieldWithoutConflict
         """.trimIndent()) shouldBe """
             import b.pkg.B
             val v = B().b
+            val v = B().protectedField
         """.trimIndent()
     }
 
