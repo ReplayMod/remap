@@ -1,4 +1,4 @@
-package com.replaymod.gradle.remap.mapper
+package com.replaymod.gradle.remap.mapper.mixin
 
 import com.replaymod.gradle.remap.util.TestData
 import io.kotest.matchers.collections.shouldHaveSize
