@@ -20,7 +20,9 @@ import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
+import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
@@ -28,6 +30,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameByGetMethodName
+import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor.Companion.propertyNameBySetMethodName
 import java.util.*
 
 internal class PsiMapper(
@@ -143,9 +146,65 @@ internal class PsiMapper(
                 replace(expr.parent, maybeGetter.identifier)
                 return
             }
+
+            val parent = expr.parent
+            if (parent is KtCallExpression) {
+                val argumentList = parent.valueArgumentList
+                val maybeSetter = getSyntheticPropertyForSetter(expr, method, mapping)
+                if (maybeSetter != null && argumentList != null) {
+                    val leftParen = argumentList.leftParenthesis!!
+                    val rightParen = argumentList.rightParenthesis!!
+                    replace(TextRange(
+                        expr.startOffset,
+                        leftParen.endOffset,
+                    ), "$maybeSetter =" + if (leftParen.nextSibling is PsiWhiteSpace) "" else " ")
+                    replace(rightParen, "")
+                    return
+                }
+            }
+
             replaceIdentifier(expr, mapped)
         }
     }
+
+    private fun getSyntheticPropertyForSetter(expr: PsiElement, method: PsiMethod, mapping: MethodMapping): String? {
+        // Check if the setter method qualifies for synthetic property conversion
+        if (method.returnType != PsiType.VOID) return null
+        if (method.hasModifier(JvmModifier.STATIC)) return null
+        val parameter = method.parameterList.parameters.singleOrNull() ?: return null
+        val type = ClassUtil.getBinaryPresentation(parameter.type)
+
+        // `super.setDebugInfo(value)` is a special case which cannot be replaced with a synthetic property
+        if (expr.parent.parent.let { it is KtDotQualifiedExpression && it.firstChild is KtSuperExpression }) {
+            return null
+        }
+
+        val setterName = mapping.deobfuscatedName
+
+        for (withIsPrefix in listOf(false, true)) {
+            if (withIsPrefix && type != "Z") continue // only boolean types may use the `is` prefix
+            val propertyName = propertyNameBySetMethodName(Name.identifier(setterName), withIsPrefix) ?: continue
+            val property = propertyName.identifier
+
+            val getterName = getterNameByPropertyName(property, withIsPrefix)
+            mapping.parent.methodMappings.find {
+                it.deobfuscatedName == getterName
+                        && it.descriptor.paramTypes.isEmpty()
+                        && it.descriptor.returnType.toString() == type
+            } ?: continue
+
+            if (isSyntheticPropertyShadowedByField(property, mapping, expr)) {
+                return null
+            }
+
+            return property
+        }
+
+        return null
+    }
+
+    private fun getterNameByPropertyName(propertyName: String, withIsPrefix: Boolean): String =
+        if (withIsPrefix) propertyName else "get" + propertyName.replaceFirstChar { it.uppercaseChar() }
 
     private fun map(expr: PsiElement, method: KtNamedFunction) {
         val psiMethod = method.getRepresentativeLightMethod()
@@ -156,10 +215,34 @@ internal class PsiMapper(
     }
 
     private fun map(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
-        val getter = property.getMethod
-            .overriddenTreeAsSequence(false)
-            .firstNotNullOfOrNull { it.findPsi() }
-                as? PsiMethod ?: return
+        val assignment = findAssignment(expr)
+        if (assignment != null) {
+            mapSetter(expr, assignment, property)
+        } else {
+            mapGetter(expr, property)
+        }
+    }
+
+    private fun findAssignment(expr: PsiElement): KtBinaryExpression? {
+        val parent = expr.parent
+        // Our parent will either be the assignment (`expr = value`) or a qualified expression (`receiver.expr = value`)
+        val leftSide = if (parent is KtQualifiedExpression) {
+            if (parent.selectorExpression != expr) return null // we are on the wrong side: `expr.selector = value`
+            parent
+        } else {
+            expr
+        }
+        val assignment = leftSide.parent as? KtBinaryExpression ?: return null // not an assignment after all
+        if (assignment.left != leftSide) return null // turns out we are on the right side of the assignment
+        if (assignment.operationToken != KtTokens.EQ) return null // not actually an assignment
+        return assignment
+    }
+
+    private fun FunctionDescriptor.findPsiInHierarchy() =
+        overriddenTreeAsSequence(false).firstNotNullOfOrNull { it.findPsi() } as? PsiMethod
+
+    private fun mapGetter(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
+        val getter = property.getMethod.findPsiInHierarchy() ?: return
         val mapping = findMapping(getter)
         val mappedGetter = mapping?.deobfuscatedName ?: return
         if (mappedGetter != getter.name) {
@@ -169,6 +252,43 @@ internal class PsiMapper(
                 // in the target mapping (e.g. `canUsePortal()`)
                 // This is the reverse to the operation in [map(PsiElement, PsiMethod)].
                 replaceIdentifier(expr, "$mappedGetter()")
+            } else {
+                val mapped = maybeMapped.identifier
+                replaceIdentifier(expr, mapped)
+            }
+        }
+    }
+
+    private fun mapSetter(expr: PsiElement, assignment: KtBinaryExpression, property: SyntheticJavaPropertyDescriptor) {
+        val getter = property.getMethod.findPsiInHierarchy() ?: return
+        val setter = property.setMethod?.findPsiInHierarchy() ?: return
+        val mappingGetter = findMapping(getter)
+        val mappingSetter = findMapping(setter)
+        val mappedGetter = mappingGetter?.deobfuscatedName // if getter is gone, we need to switch to method invocation
+        val mappedSetter = mappingSetter?.deobfuscatedName ?: return
+        if (mappedGetter == null || mappedSetter != setter.name) {
+            val maybeMapped = if (mappedGetter != null) {
+                val isBooleanField = mappingGetter.deobfuscatedDescriptor.endsWith("Z")
+                val withIsPrefix = isBooleanField && mappedGetter.startsWith("is")
+                val propertyByGetter = propertyNameByGetMethodName(Name.identifier(mappedGetter))
+                val propertyBySetter = propertyNameBySetMethodName(Name.identifier(mappedSetter), withIsPrefix)
+                if (propertyByGetter == propertyBySetter) {
+                    propertyBySetter
+                } else {
+                    null // remapped setter does not match remapped getter, use accessor method instead
+                }
+            } else {
+                null
+            }
+            if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mappingSetter, expr)) {
+                val op = assignment.operationReference
+                replace(TextRange(
+                    expr.startOffset,
+                    // If there is a single whitespace after the operation element, eat it, otherwise don't
+                    op.endOffset + if ((op.nextSibling as? PsiWhiteSpace)?.textLength == 1) 1 else 0
+                ), "$mappedSetter(")
+                val right = assignment.right!!
+                replace(TextRange(right.endOffset, right.endOffset), ")")
             } else {
                 val mapped = maybeMapped.identifier
                 replaceIdentifier(expr, mapped)

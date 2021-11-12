@@ -2,7 +2,6 @@ package com.replaymod.gradle.remap.mapper.kotlin
 
 import com.replaymod.gradle.remap.util.TestData
 import io.kotest.matchers.shouldBe
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 
 class TestKotlinSyntheticProperties {
@@ -63,37 +62,43 @@ class TestKotlinSyntheticProperties {
     }
 
     @Test
-    @Disabled("not yet implemented")
     fun `converts synthetic property to setter if no longer synthetic`() {
         TestData.remapKt("""
             import a.pkg.A
             fun test() {
                 A().nonSyntheticA = A()
-                A().isNonSyntheticBooleanA = true
+                A().isNonSyntheticBooleanA =
+                    // Comment
+                    true // More comment
             }
         """.trimIndent()) shouldBe """
             import b.pkg.B
             fun test() {
                 B().setterB(B())
-                B().setterBooleanB(true)
+                B().setterBooleanB(
+                    // Comment
+                    true) // More comment
             }
         """.trimIndent()
     }
 
     @Test
-    @Disabled("not yet implemented")
     fun `converts setter to synthetic property if now synthetic`() {
         TestData.remapKt("""
             import a.pkg.A
             fun test() {
                 A().setterA(A())
-                A().setterBooleanA(true)
+                A().setterBooleanA(
+                    // Comment
+                    true) // More comment
             }
         """.trimIndent()) shouldBe """
             import b.pkg.B
             fun test() {
                 B().nonSyntheticB = B()
-                B().isNonSyntheticBooleanB = true
+                B().isNonSyntheticBooleanB =
+                    // Comment
+                    true // More comment
             }
         """.trimIndent()
     }
@@ -168,6 +173,31 @@ class TestKotlinSyntheticProperties {
             import pkg.Kt
             val v = Kt().syntheticB
             fun test() { Kt().syntheticB = Kt() }
+        """.trimIndent()
+    }
+
+    @Test
+    fun `does not replace super calls with synthetic properties`() {
+        TestData.remapKt("""
+            import a.pkg.A
+            class C : A() {
+                init {
+                    super.getSyntheticA()
+                    super.isSyntheticBooleanA()
+                    super.setSyntheticA(A())
+                    super.setSyntheticBooleanA(true)
+                }
+            }
+        """.trimIndent()) shouldBe """
+            import b.pkg.B
+            class C : B() {
+                init {
+                    super.getSyntheticB()
+                    super.isSyntheticBooleanB()
+                    super.setSyntheticB(B())
+                    super.setSyntheticBooleanB(true)
+                }
+            }
         """.trimIndent()
     }
 }
