@@ -17,6 +17,9 @@ repositories {
     maven("https://repo.spongepowered.org/repository/maven-public/")
 }
 
+val testA by sourceSets.creating
+val testB by sourceSets.creating
+
 dependencies {
     api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.21")
     implementation(kotlin("stdlib"))
@@ -26,6 +29,8 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:5.7.1")
     testImplementation("io.kotest:kotest-assertions-core:4.6.3")
 
+    testRuntimeOnly(testA.output)
+    testRuntimeOnly(testB.output)
     testRuntimeOnly("org.spongepowered:mixin:0.8.4")
 }
 
