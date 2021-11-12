@@ -41,6 +41,10 @@ object TestData {
             findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
             findClasspathEntry("a.pkg.A"),
         )
+        remappedClasspath = arrayOf(
+            findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
+            findClasspathEntry("b.pkg.B"),
+        )
         patternAnnotation = "remap.Pattern"
     }
 

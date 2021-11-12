@@ -15,6 +15,8 @@ MD: a/pkg/A/getterA ()La/pkg/A; b/pkg/B/getNonSyntheticB ()Lb/pkg/B;
 MD: a/pkg/A/setterA (La/pkg/A;)V; b/pkg/B/setNonSyntheticB (Lb/pkg/B;)V;
 MD: a/pkg/A/getterBooleanA ()Z; b/pkg/B/isNonSyntheticBooleanB ()Z;
 MD: a/pkg/A/setterBooleanA (Z)V; b/pkg/B/setNonSyntheticBooleanB (Z)V;
+FD: a/pkg/A/conflictingField b/pkg/B/conflictingField
+MD: a/pkg/A/getConflictingFieldWithoutConflict ()I; b/pkg/B/getConflictingField ()I;
 MD: a/pkg/A/aOverloaded ()V b/pkg/B/bOverloaded ()V
 MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
 MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V

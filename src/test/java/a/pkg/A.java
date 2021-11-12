@@ -62,6 +62,11 @@ public class A extends AParent implements AInterface {
     public void setterBooleanA(boolean arg) {
     }
 
+    public int conflictingField;
+    public int getConflictingFieldWithoutConflict() {
+        return conflictingField;
+    }
+
     public void aOverloaded() {
     }
 

@@ -62,6 +62,11 @@ public class B extends BParent implements BInterface {
     public void setterBooleanB(boolean arg) {
     }
 
+    public int conflictingField;
+    public int getConflictingField() {
+        return conflictingField;
+    }
+
     public void bOverloaded() {
     }
 

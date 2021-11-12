@@ -97,4 +97,48 @@ class TestKotlinSyntheticProperties {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `does not convert getter to synthetic property if it would be shadowed by a field with the same name`() {
+        TestData.remapKt("""
+            import a.pkg.A
+            val v = A().getConflictingFieldWithoutConflict()
+        """.trimIndent()) shouldBe """
+            import b.pkg.B
+            val v = B().getConflictingField()
+        """.trimIndent()
+    }
+
+    @Test
+    fun `does convert getter to synthetic property if the field which it would be shadowed by is inaccessible`() {
+        TestData.remapKt("""
+            import a.pkg.A
+            val v = A().getA()
+        """.trimIndent()) shouldBe """
+            import b.pkg.B
+            val v = B().b
+        """.trimIndent()
+    }
+
+    @Test
+    fun `convert synthetic property to getter if it would be shadowed by a field with the same name`() {
+        TestData.remapKt("""
+            import a.pkg.A
+            val v = A().conflictingFieldWithoutConflict
+        """.trimIndent()) shouldBe """
+            import b.pkg.B
+            val v = B().getConflictingField()
+        """.trimIndent()
+    }
+
+    @Test
+    fun `does not convert synthetic property to getter if the field which it would be shadowed by is inaccessible`() {
+        TestData.remapKt("""
+            import a.pkg.A
+            val v = A().a
+        """.trimIndent()) shouldBe """
+            import b.pkg.B
+            val v = B().b
+        """.trimIndent()
+    }
 }

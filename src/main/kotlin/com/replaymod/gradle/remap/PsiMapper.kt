@@ -8,6 +8,7 @@ import org.cadixdev.lorenz.model.MethodMapping
 import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
 import org.jetbrains.kotlin.com.intellij.lang.ASTNode
 import org.jetbrains.kotlin.com.intellij.lang.jvm.JvmModifier
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
@@ -26,6 +27,7 @@ import java.util.*
 
 internal class PsiMapper(
         private val map: MappingSet,
+        private val remappedProject: Project?,
         private val file: PsiFile,
         private val patterns: PsiPatterns?
 ) {
@@ -114,7 +116,8 @@ internal class PsiMapper(
             return
         }
 
-        val mapped = findMapping(method)?.deobfuscatedName
+        val mapping = findMapping(method)
+        val mapped = mapping?.deobfuscatedName
         if (mapped != null && mapped != method.name) {
             val maybeGetter = propertyNameByGetMethodName(Name.identifier(mapped))
             if (maybeGetter != null // must have getter-style name
@@ -123,6 +126,8 @@ internal class PsiMapper(
                     && !method.hasModifier(JvmModifier.STATIC) // synthetic properties cannot be static
                     // `super.getDebugInfo()` is a special case which cannot be replaced with a synthetic property
                     && expr.parent.parent.let { it !is KtDotQualifiedExpression || it.firstChild !is KtSuperExpression }
+                    // cannot use synthetic properties if there is a field of the same name
+                    && !isSyntheticPropertyShadowedByField(maybeGetter.identifier, mapping)
                     // cannot use synthetic properties outside of kotlin files (cause they're a kotlin thing)
                     && expr.containingFile  is KtFile) {
                 // E.g. `entity.canUsePortal()` maps to `entity.isNonBoss()` but when we're using kotlin and the target
@@ -146,10 +151,11 @@ internal class PsiMapper(
 
     private fun map(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
         val getter = property.getMethod.findPsi() as? PsiMethod ?: return
-        val mappedGetter = findMapping(getter)?.deobfuscatedName ?: return
+        val mapping = findMapping(getter)
+        val mappedGetter = mapping?.deobfuscatedName ?: return
         if (mappedGetter != getter.name) {
             val maybeMapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))
-            if (maybeMapped == null) {
+            if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mapping)) {
                 // Can happen if a method is a synthetic property in the current mapping (e.g. `isNonBoss`) but not
                 // in the target mapping (e.g. `canUsePortal()`)
                 // This is the reverse to the operation in [map(PsiElement, PsiMethod)].
@@ -251,6 +257,12 @@ internal class PsiMapper(
             is KtNamedFunction -> map(expr, resolved.getRepresentativeLightMethod())
             is PsiClass, is PsiPackage -> map(expr, resolved as PsiQualifiedNamedElement)
         }
+    }
+
+    private fun isSyntheticPropertyShadowedByField(propertyName: String, mapping: MethodMapping): Boolean {
+        val cls = findPsiClass(mapping.parent.fullDeobfuscatedName, remappedProject ?: file.project) ?: return false
+        val field = cls.findFieldByName(propertyName, true) ?: return false
+        return field.hasModifier(JvmModifier.PUBLIC) || field.hasModifier(JvmModifier.PROTECTED)
     }
 
     // Note: Supports only Mixins with a single target (ignores others)

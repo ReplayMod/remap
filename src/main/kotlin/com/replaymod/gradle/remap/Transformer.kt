@@ -16,8 +16,10 @@ import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
 import org.jetbrains.kotlin.com.intellij.codeInsight.CustomExceptionHandler
 import org.jetbrains.kotlin.com.intellij.mock.MockProject
+import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
@@ -41,6 +43,7 @@ import kotlin.system.exitProcess
 
 class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
+    var remappedClasspath: Array<String>? = null
     var patternAnnotation: String? = null
 
     @Throws(IOException::class)
@@ -95,6 +98,8 @@ class Transformer(private val map: MappingSet) {
                     { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
             )
 
+            val remappedProject = remappedClasspath?.let { setupRemappedProject(disposable, it) }
+
             val patterns = patternAnnotation?.let { annotationFQN ->
                 val patterns = PsiPatterns(annotationFQN)
                 val annotationName = annotationFQN.substring(annotationFQN.lastIndexOf('.') + 1)
@@ -117,7 +122,7 @@ class Transformer(private val map: MappingSet) {
                 val psiFile = psiManager.findFile(file)!!
 
                 val mapped = try {
-                    PsiMapper(map, psiFile, patterns).remapFile(analysis.bindingContext)
+                    PsiMapper(map, remappedProject, psiFile, patterns).remapFile(analysis.bindingContext)
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
                 }
@@ -128,6 +133,28 @@ class Transformer(private val map: MappingSet) {
             Files.walk(tmpDir).map<File> { it.toFile() }.sorted(Comparator.reverseOrder()).forEach { it.delete() }
             Disposer.dispose(disposable)
         }
+    }
+
+    private fun setupRemappedProject(disposable: Disposable, classpath: Array<String>): Project {
+        val config = CompilerConfiguration()
+        config.put(CommonConfigurationKeys.MODULE_NAME, "main")
+        config.addAll(CLIConfigurationKeys.CONTENT_ROOTS, classpath.map { JvmClasspathRoot(File(it)) })
+        config.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, true))
+
+        val environment = KotlinCoreEnvironment.createForProduction(
+            disposable,
+            config,
+            EnvironmentConfigFiles.JVM_CONFIG_FILES
+        )
+        val project = environment.project
+        TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
+            project,
+            emptyList(),
+            NoScopeRecordCliBindingTrace(),
+            environment.configuration,
+            { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
+        )
+        return environment.project
     }
 
     companion object {
