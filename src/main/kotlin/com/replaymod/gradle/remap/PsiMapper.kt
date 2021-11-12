@@ -77,6 +77,12 @@ internal class PsiMapper(
         return Pair(result, errors)
     }
 
+    private fun findPsiClass(name: String, project: Project = file.project) =
+        JavaPsiFacade.getInstance(project).findClass(
+            name.replace('/', '.').replace('$', '.'),
+            GlobalSearchScope.allScope(project),
+        )
+
     private fun map(expr: PsiElement, field: PsiField) {
         val fieldName = field.name ?: return
         val declaringClass = field.containingClass ?: return
@@ -270,10 +276,7 @@ internal class PsiMapper(
                 if (mapped != qualifiedName) {
                     replace(value, "\"$mapped\"")
                 }
-                val psiClass = JavaPsiFacade.getInstance(file.project).findClass(
-                    qualifiedName.replace('$', '.'),
-                    GlobalSearchScope.allScope(file.project),
-                ) ?: continue
+                val psiClass = findPsiClass(qualifiedName) ?: continue
                 return Pair(psiClass, mapping)
             }
         }
@@ -408,10 +411,7 @@ internal class PsiMapper(
         val name = signature.substring(ownerEnd + 1, argsBegin)
         val returnType = signature.substring(argsEnd + 1)
 
-        val ownerPsi = JavaPsiFacade.getInstance(file.project).findClass(
-            owner.drop(1).dropLast(1).replace('/', '.').replace('$', '.'),
-            GlobalSearchScope.allScope(file.project),
-        )
+        val ownerPsi = findPsiClass(owner.drop(1).dropLast(1))
         val methodPsi = if (method) {
             val desc = signature.substring(argsBegin)
             ownerPsi?.findMethodsByName(name, true)?.find { ClassUtil.getAsmMethodSignature(it) == desc }
