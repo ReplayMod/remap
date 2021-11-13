@@ -27,6 +27,23 @@ class TestMixinAccessors {
     }
 
     @Test
+    fun `remaps @Invoker with non-standard method name`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            interface MixinA {
+                @org.spongepowered.asm.mixin.gen.Invoker("aMethod")
+                void arbitraryName();
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            interface MixinA {
+                @org.spongepowered.asm.mixin.gen.Invoker("bMethod")
+                void arbitraryName();
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps @Accessor`() {
         TestData.remap("""
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)

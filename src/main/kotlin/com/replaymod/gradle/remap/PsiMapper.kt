@@ -437,7 +437,9 @@ internal class PsiMapper(
     private fun remapAccessors(mapping: ClassMapping<*, *>) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
-                val annotation = method.getAnnotation(CLASS_ACCESSOR) ?: method.getAnnotation(CLASS_INVOKER) ?: return
+                val accessorAnnotation = method.getAnnotation(CLASS_ACCESSOR)
+                val invokerAnnotation = method.getAnnotation(CLASS_INVOKER)
+                val annotation = accessorAnnotation ?: invokerAnnotation ?: return
 
                 val methodName = method.name
                 val targetByName = when {
@@ -451,7 +453,7 @@ internal class PsiMapper(
                     it.name == null || it.name == "value"
                 }?.literalValue ?: targetByName ?: throw IllegalArgumentException("Cannot determine accessor target for $method")
 
-                val mapped = if (methodName.startsWith("invoke")) {
+                val mapped = if (invokerAnnotation != null) {
                     mapping.methodMappings.find { it.obfuscatedName == target }?.deobfuscatedName
                 } else {
                     mapping.findFieldMapping(target)?.deobfuscatedName
