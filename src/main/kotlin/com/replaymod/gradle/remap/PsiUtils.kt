@@ -19,8 +19,11 @@ internal val PsiClass.dollarQualifiedName: String? get() {
     return "$parentName$$selfName"
 }
 
-internal val PsiNameValuePair.resolvedLiteralValue: Pair<PsiLiteralExpression, String>? get () {
-    var value: PsiElement? = value
+internal val PsiNameValuePair.resolvedLiteralValue: Pair<PsiLiteralExpression, String>?
+    get () = value?.resolvedLiteralValue
+
+private val PsiElement.resolvedLiteralValue: Pair<PsiLiteralExpression, String>? get () {
+    var value: PsiElement? = this
     while (value is PsiReferenceExpression) {
         val resolved = value.resolve()
         value = when (resolved) {
@@ -31,6 +34,12 @@ internal val PsiNameValuePair.resolvedLiteralValue: Pair<PsiLiteralExpression, S
     val literal = value as? PsiLiteralExpression ?: return null
     return Pair(literal, StringUtil.unquoteString(literal.text))
 }
+
+internal val PsiAnnotationMemberValue.resolvedLiteralValues: List<Pair<PsiLiteralExpression, String>>
+    get () = when (this) {
+        is PsiArrayInitializerMemberValue -> initializers.mapNotNull { it.resolvedLiteralValue }
+        else -> listOfNotNull(resolvedLiteralValue)
+    }
 
 internal object PsiUtils {
     fun getSignature(method: PsiMethod): MethodSignature = MethodSignature(method.name, getDescriptor(method))

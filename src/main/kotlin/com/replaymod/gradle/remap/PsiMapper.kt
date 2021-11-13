@@ -481,10 +481,8 @@ internal class PsiMapper(
                         ?: method.getAnnotation(CLASS_REDIRECT)
                         ?: return
 
-                for (attribute in annotation.parameterList.attributes) {
-                    if ("method" != attribute.name) continue
-                    // Note: mixin supports multiple targets, we do not (yet)
-                    val (literalExpr, literalValue) = attribute.resolvedLiteralValue ?: continue
+                val methodAttrib = annotation.findDeclaredAttributeValue("method")
+                for ((literalExpr, literalValue) in methodAttrib?.resolvedLiteralValues ?: emptyList()) {
                     val (targetName, targetDesc) = if ('(' in literalValue) {
                         MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
                     } else {
@@ -497,7 +495,7 @@ internal class PsiMapper(
                         }
                     } else {
                         if (targetMethods.size > 1) {
-                            error(attribute, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString { 
+                            error(literalExpr, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString { 
                                 "\"${it.name}${ClassUtil.getAsmMethodSignature(it)}\"" 
                             }}")
                         }

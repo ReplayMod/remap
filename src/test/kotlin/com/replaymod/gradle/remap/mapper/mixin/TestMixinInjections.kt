@@ -162,6 +162,23 @@ class TestMixinInjections {
     }
 
     @Test
+    fun `remaps multiple methods`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = { "aMethod", "aInterfaceMethod" })
+                private void test() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = { "bMethod", "bInterfaceMethod" })
+                private void test() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps @At target`() {
         TestData.remap("""
             import org.spongepowered.asm.mixin.injection.At;
