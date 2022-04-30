@@ -475,15 +475,7 @@ internal class PsiMapper(
     private fun remapMixinInjections(targetClass: PsiClass, mapping: ClassMapping<*, *>) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
-                val annotation = method.getAnnotation(CLASS_INJECT)
-                        ?: method.getAnnotation(CLASS_MODIFY_ARG)
-                        ?: method.getAnnotation(CLASS_MODIFY_ARGS)
-                        ?: method.getAnnotation(CLASS_MODIFY_CONSTANT)
-                        ?: method.getAnnotation(CLASS_MODIFY_VARIABLE)
-                        ?: method.getAnnotation(CLASS_REDIRECT)
-                        ?: return
-
-                val methodAttrib = annotation.findDeclaredAttributeValue("method")
+                val methodAttrib = method.annotations.firstNotNullOfOrNull { it.findDeclaredAttributeValue("method") }
                 for ((literalExpr, literalValue) in methodAttrib?.resolvedLiteralValues ?: emptyList()) {
                     val (targetName, targetDesc) = if ('(' in literalValue) {
                         MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
@@ -762,12 +754,6 @@ internal class PsiMapper(
         private const val CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor"
         private const val CLASS_INVOKER = "org.spongepowered.asm.mixin.gen.Invoker"
         private const val CLASS_AT = "org.spongepowered.asm.mixin.injection.At"
-        private const val CLASS_INJECT = "org.spongepowered.asm.mixin.injection.Inject"
-        private const val CLASS_MODIFY_ARG = "org.spongepowered.asm.mixin.injection.ModifyArg"
-        private const val CLASS_MODIFY_ARGS = "org.spongepowered.asm.mixin.injection.ModifyArgs"
-        private const val CLASS_MODIFY_CONSTANT = "org.spongepowered.asm.mixin.injection.ModifyConstant"
-        private const val CLASS_MODIFY_VARIABLE = "org.spongepowered.asm.mixin.injection.ModifyVariable"
-        private const val CLASS_REDIRECT = "org.spongepowered.asm.mixin.injection.Redirect"
         private const val CLASS_OVERRIDE = "java.lang.Override"
 
         private fun isSwitchCase(e: PsiElement): Boolean {
