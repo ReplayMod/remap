@@ -10,8 +10,6 @@ import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace
-import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
 import org.jetbrains.kotlin.com.intellij.codeInsight.CustomExceptionHandler
@@ -25,7 +23,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
@@ -90,13 +87,11 @@ class Transformer(private val map: MappingSet) {
             val psiFiles = virtualFiles.mapValues { psiManager.findFile(it.value)!! }
             val ktFiles = psiFiles.values.filterIsInstance<KtFile>()
 
-            val analysis = TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
-                    project,
-                    ktFiles,
-                    NoScopeRecordCliBindingTrace(),
-                    environment.configuration,
-                    { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
-            )
+            val analysis = try {
+                analyze1521(environment, ktFiles)
+            } catch (e: NoSuchMethodError) {
+                analyze1620(environment, ktFiles)
+            }
 
             val remappedProject = remappedClasspath?.let { setupRemappedProject(disposable, it) }
 
@@ -146,14 +141,11 @@ class Transformer(private val map: MappingSet) {
             config,
             EnvironmentConfigFiles.JVM_CONFIG_FILES
         )
-        val project = environment.project
-        TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
-            project,
-            emptyList(),
-            NoScopeRecordCliBindingTrace(),
-            environment.configuration,
-            { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
-        )
+        try {
+            analyze1521(environment, emptyList())
+        } catch (e: NoSuchMethodError) {
+            analyze1620(environment, emptyList())
+        }
         return environment.project
     }
 
