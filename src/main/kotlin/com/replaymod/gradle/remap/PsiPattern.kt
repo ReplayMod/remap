@@ -85,6 +85,8 @@ internal class PsiPattern(
                     && match(pattern.expression, expr.expression)
             is PsiNewExpression -> expr is PsiNewExpression
                     && match(pattern.argumentList, expr.argumentList)
+            is PsiLiteralExpression -> expr is PsiLiteralExpression
+                    && pattern.text == expr.text
             else -> false
         }
 
