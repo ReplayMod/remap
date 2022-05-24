@@ -8,6 +8,7 @@ import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
 internal class PsiPattern(
         private val parameters: List<String>,
+        private val varArgs: Boolean,
         private val pattern: PsiStatement,
         private val replacement: List<String>
 ) {
@@ -40,7 +41,7 @@ internal class PsiPattern(
         }
     }
 
-    inner class Matcher(private val root: PsiElement, private val arguments: MutableList<PsiElement> = mutableListOf()) {
+    inner class Matcher(private val root: PsiElement, private val arguments: MutableList<TextRange> = mutableListOf()) {
 
         fun toChanges(): List<Pair<TextRange, String>> {
             val sortedArgs = arguments.toList().sortedBy { it.startOffset }
@@ -49,7 +50,14 @@ internal class PsiPattern(
             val replacementIter = replacement.iterator()
             var start = root.startOffset
             for (argPsi in sortedArgs) {
-                changes.push(Pair(TextRange(start, argPsi.startOffset), replacementIter.next()))
+                var replacement = replacementIter.next()
+                if (argPsi.isEmpty) {
+                    // An argument range which is empty should only happen when we're matching a varargs method but the
+                    // match has zero varargs. This is a hack (cause it depends on exact spacing) to avoid the trailing
+                    // comma we'd otherwise have if there are other leading arguments in the call.
+                    replacement = replacement.removeSuffix(", ")
+                }
+                changes.push(Pair(TextRange(start, argPsi.startOffset), replacement))
                 start = argPsi.endOffset
             }
             changes.push(Pair(TextRange(start, root.endOffset), replacementIter.next()))
@@ -74,9 +82,7 @@ internal class PsiPattern(
                     && match(pattern.methodExpression, expr.methodExpression)
                     && match(pattern.argumentList, expr.argumentList)
             is PsiExpressionList -> expr is PsiExpressionList
-                    && pattern.expressionCount == expr.expressionCount
-                    && pattern.expressions.asSequence().zip(expr.expressions.asSequence())
-                    .all { (pattern, expr) -> match(pattern, expr) }
+                    && match(pattern, expr)
             is PsiExpressionStatement -> expr is PsiExpressionStatement
                     && match(pattern.expression, expr.expression)
             is PsiTypeCastExpression -> expr is PsiTypeCastExpression
@@ -97,7 +103,7 @@ internal class PsiPattern(
                 val patternType = pattern.type ?: return false
                 val exprType = expr.type ?: return false
                 if (patternType.isAssignableFrom(exprType)) {
-                    arguments.add(expr)
+                    arguments.add(expr.textRange)
                     true
                 } else {
                     false
@@ -107,5 +113,56 @@ internal class PsiPattern(
                     && pattern.referenceName == expr.referenceName
                     && match(pattern.qualifierExpression, expr.qualifierExpression)
         }
+
+        private fun match(pattern: PsiExpressionList, expr: PsiExpressionList): Boolean {
+            val argsPattern = pattern.expressions
+            val argsExpr = expr.expressions
+
+            val varArgPattern = (argsPattern.lastOrNull() as? PsiReferenceExpression?)
+            if (varArgPattern == null || !isVarArgsParameter(varArgPattern)) {
+                if (argsPattern.size != argsExpr.size) {
+                    return false
+                }
+                return argsPattern.asSequence().zip(argsExpr.asSequence())
+                    .all { (pattern, expr) -> match(pattern, expr) }
+            }
+
+            if (argsPattern.size - 1 > argsExpr.size) {
+                return false
+            }
+
+            val regularArgsMatch = argsPattern.dropLast(1).asSequence().zip(argsExpr.asSequence())
+                .all { (pattern, expr) -> match(pattern, expr) }
+            if (!regularArgsMatch) {
+                return false
+            }
+
+            val regularArgsExpr = argsExpr.take(argsPattern.size - 1)
+            val varArgsExpr = argsExpr.drop(regularArgsExpr.size)
+
+            val argArrayTypePattern = varArgPattern.type as PsiArrayType
+            if (varArgsExpr.size == 1 && match(varArgPattern, varArgsExpr.single())) {
+                return true
+            }
+
+            val argTypePattern = argArrayTypePattern.componentType
+            for (argExpr in varArgsExpr) {
+                val argTypeExpr = argExpr.type ?: return false
+                if (!argTypePattern.isAssignableFrom(argTypeExpr)) {
+                    return false
+                }
+            }
+
+            arguments.add(if (varArgsExpr.isEmpty()) {
+                TextRange.from(expr.lastChild.startOffset, 0)
+            } else {
+                TextRange(varArgsExpr.first().startOffset, varArgsExpr.last().endOffset)
+            })
+
+            return true
+        }
+
+        private fun isVarArgsParameter(expr: PsiReferenceExpression): Boolean =
+            varArgs && expr.firstChild is PsiReferenceParameterList && expr.referenceName == parameters.last()
     }
 }

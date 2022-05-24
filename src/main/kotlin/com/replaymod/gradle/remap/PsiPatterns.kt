@@ -24,6 +24,7 @@ internal class PsiPatterns(private val annotationFQN: String) {
         val methodLine = offsetToLineNumber(file.text, body.startOffset)
 
         val parameters = method.parameterList.parameters.map { it.name }
+        val varArgs = method.parameterList.parameters.lastOrNull()?.isVarArgs ?: false
 
         val project = file.project
         val psiFileFactory = PsiFileFactory.getInstance(project)
@@ -70,7 +71,7 @@ internal class PsiPatterns(private val annotationFQN: String) {
             replacement.push(replacementFile.slice(start until replacementExpression.endOffset))
         }
 
-        patterns.add(PsiPattern(parameters, body.statements.last(), replacement))
+        patterns.add(PsiPattern(parameters, varArgs, body.statements.last(), replacement))
     }
 
     fun find(block: PsiCodeBlock): MutableList<Matcher> {
