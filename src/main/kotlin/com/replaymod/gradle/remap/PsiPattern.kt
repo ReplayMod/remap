@@ -7,7 +7,7 @@ import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
 internal class PsiPattern(
-        private val parameters: List<String>,
+        private val parameters: Set<PsiParameter>,
         private val varArgs: Boolean,
         private val pattern: PsiStatement,
         private val replacement: List<String>
@@ -42,6 +42,8 @@ internal class PsiPattern(
     }
 
     inner class Matcher(private val root: PsiElement, private val arguments: MutableList<TextRange> = mutableListOf()) {
+
+        private val localVariables = mutableMapOf<PsiElement, PsiElement>()
 
         fun toChanges(): List<Pair<TextRange, String>> {
             val sortedArgs = arguments.toList().sortedBy { it.startOffset }
@@ -97,25 +99,51 @@ internal class PsiPattern(
                     && pattern.classReference?.resolve() == expr.classReference?.resolve()
                     && match(pattern.qualifier, expr.qualifier)
                     && match(pattern.argumentList, expr.argumentList)
+            is PsiLambdaExpression -> expr is PsiLambdaExpression
+                    && match(pattern.parameterList, expr.parameterList)
+                    && match(pattern.body, expr.body)
+            is PsiParameterList -> expr is PsiParameterList
+                    && pattern.parametersCount == expr.parametersCount
+                    && pattern.parameters.zip(expr.parameters).all { (p, e) -> match(p, e) }
             is PsiLiteralExpression -> expr is PsiLiteralExpression
                     && pattern.text == expr.text
             else -> false
         }
 
+        private fun match(pattern: PsiParameter, expr: PsiParameter): Boolean {
+            if (pattern.isVarArgs != expr.isVarArgs) {
+                return false
+            }
+
+            localVariables[pattern] = expr
+            return true
+        }
+
         private fun match(pattern: PsiReferenceExpression, expr: PsiExpression): Boolean {
-            return if (pattern.firstChild is PsiReferenceParameterList && pattern.referenceName in parameters) {
+            val resolvedPattern = pattern.resolve()
+            if (resolvedPattern in parameters) {
                 val patternType = pattern.type ?: return false
                 val exprType = expr.type ?: return false
-                if (patternType.isAssignableFrom(exprType)) {
+                return if (patternType.isAssignableFrom(exprType)) {
                     arguments.add(expr.textRange)
                     true
                 } else {
                     false
                 }
             }
-            else expr is PsiReferenceExpression
-                    && pattern.referenceName == expr.referenceName
-                    && match(pattern.qualifierExpression, expr.qualifierExpression)
+
+            // If the pattern is not a free variable, the expression must match it structurally
+            if (expr !is PsiReferenceExpression) {
+                return false
+            }
+
+            // If the pattern refers to a specific local variable, so must the expression
+            val localVariable = localVariables[resolvedPattern]
+            if (localVariable != null) {
+                return expr.resolve() == localVariable
+            }
+
+            return pattern.referenceName == expr.referenceName && match(pattern.qualifierExpression, expr.qualifierExpression)
         }
 
         private fun match(pattern: PsiExpressionList, expr: PsiExpressionList): Boolean {
@@ -167,6 +195,6 @@ internal class PsiPattern(
         }
 
         private fun isVarArgsParameter(expr: PsiReferenceExpression): Boolean =
-            varArgs && expr.firstChild is PsiReferenceParameterList && expr.referenceName == parameters.last()
+            varArgs && expr.firstChild is PsiReferenceParameterList && expr.resolve() == parameters.last()
     }
 }

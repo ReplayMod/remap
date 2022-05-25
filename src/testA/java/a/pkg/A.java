@@ -1,5 +1,8 @@
 package a.pkg;
 
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 public class A extends AParent implements AInterface {
     private A a;
     private int aField;
@@ -96,6 +99,12 @@ public class A extends AParent implements AInterface {
     @Override
     public void aInterfaceMethod() {
         new A() {};
+    }
+
+    public static void supplier(Supplier<String> supplier) {
+    }
+
+    public static void function(Function<String, String> func) {
     }
 
     public class Inner {

@@ -23,7 +23,8 @@ internal class PsiPatterns(private val annotationFQN: String) {
         val body = method.body!!
         val methodLine = offsetToLineNumber(file.text, body.startOffset)
 
-        val parameters = method.parameterList.parameters.map { it.name }
+        val parameters = method.parameterList.parameters.toSet()
+        val parameterNames = parameters.map { it.name }.toSet()
         val varArgs = method.parameterList.parameters.lastOrNull()?.isVarArgs ?: false
 
         val project = file.project
@@ -55,7 +56,7 @@ internal class PsiPatterns(private val annotationFQN: String) {
             val arguments = mutableListOf<PsiExpression>()
             replacementExpression.accept(object : JavaRecursiveElementVisitor() {
                 override fun visitReferenceExpression(expr: PsiReferenceExpression) {
-                    if (expr.firstChild is PsiReferenceParameterList && expr.referenceName in parameters) {
+                    if (expr.firstChild is PsiReferenceParameterList && expr.referenceName in parameterNames) {
                         arguments.add(expr)
                     } else {
                         super.visitReferenceExpression(expr)
