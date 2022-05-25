@@ -89,6 +89,10 @@ internal class PsiPattern(
                     && match(pattern.operand, expr.operand)
             is PsiParenthesizedExpression -> expr is PsiParenthesizedExpression
                     && match(pattern.expression, expr.expression)
+            is PsiBinaryExpression -> expr is PsiBinaryExpression
+                    && pattern.operationTokenType == expr.operationTokenType
+                    && match(pattern.lOperand, expr.lOperand)
+                    && match(pattern.rOperand, expr.rOperand)
             is PsiNewExpression -> expr is PsiNewExpression
                     && pattern.classReference?.resolve() == expr.classReference?.resolve()
                     && match(pattern.qualifier, expr.qualifier)
