@@ -18,9 +18,8 @@ internal class PsiPattern(
                 val matcher = Matcher(element)
                 if (matcher.match(pattern)) {
                     result.add(matcher)
-                } else {
-                    super.visitElement(element)
                 }
+                super.visitElement(element)
             }
         })
     }
