@@ -72,7 +72,9 @@ internal class PsiPatterns(private val annotationFQN: String) {
             replacement.push(replacementFile.slice(start until replacementExpression.endOffset))
         }
 
-        patterns.add(PsiPattern(parameters, varArgs, body.statements.last(), replacement))
+        val replacementCanBeAssigned = replacementExpression is PsiReferenceExpression
+
+        patterns.add(PsiPattern(parameters, varArgs, body.statements.last(), replacement, replacementCanBeAssigned))
     }
 
     fun find(block: PsiCodeBlock): MutableList<Matcher> {

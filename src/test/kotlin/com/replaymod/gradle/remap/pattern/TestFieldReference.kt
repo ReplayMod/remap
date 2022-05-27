@@ -37,4 +37,37 @@ class TestFieldReference {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `should not match final field on left side of assignment when replaced by non-field`() {
+        TestData.remap("test/Test.java", """
+            class Test {
+                Test field;
+                private void test() {
+                    field = field;
+                    this.field = this.field;
+                    this.field.field = this.field.field;
+                }
+            }
+        """.trimIndent(), """
+            @remap.Pattern
+            private test.Test pattern(test.Test obj) {
+                return obj.field;
+            }
+        """.trimIndent(), """
+            @remap.Pattern
+            private test.Test pattern(test.Test obj) {
+                return matched(obj);
+            }
+        """.trimIndent()) shouldBe """
+            class Test {
+                Test field;
+                private void test() {
+                    field = field;
+                    this.field = matched(this);
+                    matched(this).field = matched(matched(this));
+                }
+            }
+        """.trimIndent()
+    }
 }

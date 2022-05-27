@@ -10,7 +10,8 @@ internal class PsiPattern(
         private val parameters: Set<PsiParameter>,
         private val varArgs: Boolean,
         private val pattern: PsiStatement,
-        private val replacement: List<String>
+        private val replacement: List<String>,
+        private val replacementCanBeAssigned: Boolean,
 ) {
     private fun find(pattern: PsiElement, tree: PsiElement, result: MutableList<Matcher>) {
         tree.accept(object : JavaRecursiveElementVisitor() {
@@ -66,7 +67,13 @@ internal class PsiPattern(
             return changes.filterNot { it.first.isEmpty && it.second.isEmpty() }
         }
 
-        fun match(pattern: PsiElement): Boolean = match(pattern, root)
+        fun match(pattern: PsiElement): Boolean {
+            val parent = root.parent
+            if (parent is PsiAssignmentExpression && parent.lExpression == root && !replacementCanBeAssigned) {
+                return false
+            }
+            return match(pattern, root)
+        }
 
         private fun match(pattern: PsiElement?, expr: PsiElement?): Boolean = when (pattern) {
             null -> expr == null
