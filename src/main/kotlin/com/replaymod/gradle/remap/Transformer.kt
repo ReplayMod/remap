@@ -17,7 +17,6 @@ import org.jetbrains.kotlin.com.intellij.mock.MockProject
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
@@ -34,6 +33,7 @@ import java.io.InputStreamReader
 import java.lang.Exception
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.*
 import kotlin.system.exitProcess
@@ -42,20 +42,27 @@ class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
     var remappedClasspath: Array<String>? = null
     var patternAnnotation: String? = null
+    var manageImports = false
 
     @Throws(IOException::class)
     fun remap(sources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> =
             remap(sources, emptyMap())
 
     @Throws(IOException::class)
-    fun remap(sources: Map<String, String>, processedSource: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
+    fun remap(sources: Map<String, String>, processedSources: Map<String, String>): Map<String, Pair<String, List<Pair<Int, String>>>> {
         val tmpDir = Files.createTempDirectory("remap")
+        val processedTmpDir = Files.createTempDirectory("remap-processed")
         val disposable = Disposer.newDisposable()
         try {
             for ((unitName, source) in sources) {
                 val path = tmpDir.resolve(unitName)
                 Files.createDirectories(path.parent)
                 Files.write(path, source.toByteArray(StandardCharsets.UTF_8), StandardOpenOption.CREATE)
+
+                val processedSource = processedSources[unitName] ?: source
+                val processedPath = processedTmpDir.resolve(unitName)
+                Files.createDirectories(processedPath.parent)
+                Files.write(processedPath, processedSource.toByteArray(), StandardOpenOption.CREATE)
             }
 
             val config = CompilerConfiguration()
@@ -93,7 +100,9 @@ class Transformer(private val map: MappingSet) {
                 analyze1620(environment, ktFiles)
             }
 
-            val remappedProject = remappedClasspath?.let { setupRemappedProject(disposable, it) }
+            val remappedEnv = remappedClasspath?.let {
+                setupRemappedProject(disposable, it, processedTmpDir)
+            }
 
             val patterns = patternAnnotation?.let { annotationFQN ->
                 val patterns = PsiPatterns(annotationFQN)
@@ -103,7 +112,7 @@ class Transformer(private val map: MappingSet) {
                     try {
                         val patternFile = vfs.findFileByIoFile(tmpDir.resolve(unitName).toFile())!!
                         val patternPsiFile = psiManager.findFile(patternFile)!!
-                        patterns.read(patternPsiFile, processedSource[unitName]!!)
+                        patterns.read(patternPsiFile, processedSources[unitName]!!)
                     } catch (e: Exception) {
                         throw RuntimeException("Failed to read patterns from file \"$unitName\".", e)
                     }
@@ -111,29 +120,45 @@ class Transformer(private val map: MappingSet) {
                 patterns
             }
 
+            val autoImports = if (manageImports && remappedEnv != null) {
+                AutoImports(remappedEnv)
+            } else {
+                null
+            }
+
             val results = HashMap<String, Pair<String, List<Pair<Int, String>>>>()
             for (name in sources.keys) {
                 val file = vfs.findFileByIoFile(tmpDir.resolve(name).toFile())!!
                 val psiFile = psiManager.findFile(file)!!
 
-                val mapped = try {
-                    PsiMapper(map, remappedProject, psiFile, analysis.bindingContext, patterns).remapFile()
+                var (text, errors) = try {
+                    PsiMapper(map, remappedEnv?.project, psiFile, analysis.bindingContext, patterns).remapFile()
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
                 }
-                results[name] = mapped
+
+                if (autoImports != null && "/* remap: no-manage-imports */" !in text) {
+                    val processedText = processedSources[name] ?: text
+                    text = autoImports.apply(psiFile, text, processedText)
+                }
+
+                results[name] = text to errors
             }
             return results
         } finally {
-            Files.walk(tmpDir).map<File> { it.toFile() }.sorted(Comparator.reverseOrder()).forEach { it.delete() }
+            Files.walk(tmpDir).sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
+            Files.walk(processedTmpDir).sorted(Comparator.reverseOrder()).forEach { Files.delete(it) }
             Disposer.dispose(disposable)
         }
     }
 
-    private fun setupRemappedProject(disposable: Disposable, classpath: Array<String>): Project {
+    private fun setupRemappedProject(disposable: Disposable, classpath: Array<String>, sourceRoot: Path): KotlinCoreEnvironment {
         val config = CompilerConfiguration()
         config.put(CommonConfigurationKeys.MODULE_NAME, "main")
         config.addAll(CLIConfigurationKeys.CONTENT_ROOTS, classpath.map { JvmClasspathRoot(File(it)) })
+        if (manageImports) {
+            config.add(CLIConfigurationKeys.CONTENT_ROOTS, JavaSourceRoot(sourceRoot.toFile(), ""))
+        }
         config.put(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, true))
 
         val environment = KotlinCoreEnvironment.createForProduction(
@@ -146,7 +171,7 @@ class Transformer(private val map: MappingSet) {
         } catch (e: NoSuchMethodError) {
             analyze1620(environment, emptyList())
         }
-        return environment.project
+        return environment
     }
 
     companion object {

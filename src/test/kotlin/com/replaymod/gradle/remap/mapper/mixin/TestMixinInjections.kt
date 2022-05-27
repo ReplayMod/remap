@@ -181,16 +181,14 @@ class TestMixinInjections {
     @Test
     fun `remaps @At target`() {
         TestData.remap("""
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
             class MixinA {
                 @Inject(method = "aMethod", at = @At(target = "La/pkg/A;aInterfaceMethod()V"))
                 private void test() {}
             }
         """.trimIndent()) shouldBe """
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
             class MixinA {
                 @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;bInterfaceMethod()V"))
@@ -202,16 +200,14 @@ class TestMixinInjections {
     @Test
     fun `remaps @At target without mappings for target`() {
         TestData.remap("""
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
             class MixinA {
                 @Inject(method = "aMethod", at = @At(target = "La/pkg/A;unmappedOverloaded(La/pkg/A;)V"))
                 private void test() {}
             }
         """.trimIndent()) shouldBe """
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
             class MixinA {
                 @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;unmappedOverloaded(Lb/pkg/B;)V"))
@@ -223,8 +219,7 @@ class TestMixinInjections {
     @Test
     fun `remaps @At target in constant`() {
         TestData.remap("""
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
             class MixinA {
                 private static final String TARGET = "La/pkg/A;aInterfaceMethod()V";
@@ -234,8 +229,7 @@ class TestMixinInjections {
                 private void test2() {}
             }
         """.trimIndent()) shouldBe """
-            import org.spongepowered.asm.mixin.injection.At;
-            import org.spongepowered.asm.mixin.injection.Inject;
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
             @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
             class MixinA {
                 private static final String TARGET = "Lb/pkg/B;bInterfaceMethod()V";

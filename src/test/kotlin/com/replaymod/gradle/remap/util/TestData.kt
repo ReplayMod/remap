@@ -48,14 +48,21 @@ object TestData {
             findClasspathEntry("BMarkerKt"),
         )
         patternAnnotation = "remap.Pattern"
+        manageImports = true
     }
 
-    fun remap(content: String, patternsBefore: String = "", patternsAfter: String = ""): String = transformer.remap(mapOf(
-        "test.java" to content,
+    fun remap(content: String): String =
+        remap("test.java", content)
+    fun remap(fileName: String, content: String): String =
+        remap(fileName, content, "", "")
+    fun remap(content: String, patternsBefore: String, patternsAfter: String): String =
+        remap("test.java", content, patternsBefore, patternsAfter)
+    fun remap(fileName: String, content: String, patternsBefore: String, patternsAfter: String): String = transformer.remap(mapOf(
+        fileName to content,
         "pattern.java" to "class Patterns {\n$patternsBefore\n}",
     ), mapOf(
         "pattern.java" to "class Patterns {\n$patternsAfter\n}",
-    ))["test.java"]!!.first
+    ))[fileName]!!.first
     fun remapWithErrors(content: String) = transformer.remap(mapOf("test.java" to content))["test.java"]!!
 
     fun remapKt(content: String): String = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!.first
