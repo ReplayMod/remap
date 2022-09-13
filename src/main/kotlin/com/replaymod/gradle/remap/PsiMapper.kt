@@ -444,6 +444,7 @@ internal class PsiMapper(
                 val methodName = method.name
                 val targetByName = when {
                     methodName.startsWith("invoke") -> methodName.substring(6)
+                    methodName.startsWith("call") -> methodName.substring(4)
                     methodName.startsWith("is") -> methodName.substring(2)
                     methodName.startsWith("get") || methodName.startsWith("set") -> methodName.substring(3)
                     else -> null
