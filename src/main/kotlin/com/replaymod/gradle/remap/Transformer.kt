@@ -12,6 +12,7 @@ import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
 import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
+import org.jetbrains.kotlin.cli.jvm.modules.CoreJrtFileSystem
 import org.jetbrains.kotlin.com.intellij.codeInsight.CustomExceptionHandler
 import org.jetbrains.kotlin.com.intellij.mock.MockProject
 import org.jetbrains.kotlin.com.intellij.openapi.Disposable
@@ -26,6 +27,7 @@ import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.psi.KtFile
+import org.jetbrains.kotlin.utils.PathUtil
 import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
@@ -41,6 +43,8 @@ import kotlin.system.exitProcess
 class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
     var remappedClasspath: Array<String>? = null
+    var jdkHome: File? = null
+    var remappedJdkHome: File? = null
     var patternAnnotation: String? = null
     var manageImports = false
 
@@ -67,6 +71,7 @@ class Transformer(private val map: MappingSet) {
 
             val config = CompilerConfiguration()
             config.put(CommonConfigurationKeys.MODULE_NAME, "main")
+            jdkHome?.let {config.setupJdk(it) }
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, JavaSourceRoot(tmpDir.toFile(), ""))
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, KotlinSourceRoot(tmpDir.toAbsolutePath().toString(), false))
             config.addAll<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, classpath!!.map { JvmClasspathRoot(File(it)) })
@@ -152,8 +157,18 @@ class Transformer(private val map: MappingSet) {
         }
     }
 
+    private fun CompilerConfiguration.setupJdk(jdkHome: File) {
+        put(JVMConfigurationKeys.JDK_HOME, jdkHome)
+
+        if (!CoreJrtFileSystem.isModularJdk(jdkHome)) {
+            val roots = PathUtil.getJdkClassesRoots(jdkHome).map { JvmClasspathRoot(it, true) }
+            addAll(CLIConfigurationKeys.CONTENT_ROOTS, 0, roots)
+        }
+    }
+
     private fun setupRemappedProject(disposable: Disposable, classpath: Array<String>, sourceRoot: Path): KotlinCoreEnvironment {
         val config = CompilerConfiguration()
+        (remappedJdkHome ?: jdkHome)?.let { config.setupJdk(it) }
         config.put(CommonConfigurationKeys.MODULE_NAME, "main")
         config.addAll(CLIConfigurationKeys.CONTENT_ROOTS, classpath.map { JvmClasspathRoot(File(it)) })
         if (manageImports) {

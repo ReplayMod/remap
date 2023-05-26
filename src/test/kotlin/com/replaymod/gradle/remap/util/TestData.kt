@@ -3,6 +3,7 @@ package com.replaymod.gradle.remap.util
 import com.replaymod.gradle.remap.Transformer
 import com.replaymod.gradle.remap.legacy.LegacyMappingSetModelFactory
 import org.cadixdev.lorenz.MappingSet
+import java.io.File
 import java.net.URL
 import java.nio.file.Paths
 import kotlin.io.path.absolutePathString
@@ -37,6 +38,7 @@ object TestData {
                 }
             }
         }
+        jdkHome = File(System.getProperty("java.home"))
         classpath = arrayOf(
             findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
             findClasspathEntry("a.pkg.A"),
