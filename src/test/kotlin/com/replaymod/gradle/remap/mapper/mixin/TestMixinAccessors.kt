@@ -14,6 +14,10 @@ class TestMixinAccessors {
                 void invokeAMethod();
                 @org.spongepowered.asm.mixin.gen.Invoker("aMethod")
                 void invokeBMethod();
+                @org.spongepowered.asm.mixin.gen.Invoker
+                void callAMethod();
+                @org.spongepowered.asm.mixin.gen.Invoker("aMethod")
+                void callBMethod();
             }
         """.trimIndent()) shouldBe """
             @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
@@ -22,6 +26,10 @@ class TestMixinAccessors {
                 void invokeAMethod();
                 @org.spongepowered.asm.mixin.gen.Invoker
                 void invokeBMethod();
+                @org.spongepowered.asm.mixin.gen.Invoker("bMethod")
+                void callAMethod();
+                @org.spongepowered.asm.mixin.gen.Invoker
+                void callBMethod();
             }
         """.trimIndent()
     }
