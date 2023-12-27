@@ -532,7 +532,7 @@ internal class PsiMapper(
 
     private fun remapMixinTarget(target: String): String {
         return when {
-            target.startsWith('(') -> return remapMethodDesc(target)
+            target.startsWith('(') -> remapMethodDesc(target)
             target.contains(':') || target.contains('(') -> remapFullyQualifiedMethodOrField(target)
             target[0] == 'L' -> remapInternalType(target)
             else -> remapInternalType("L$target;").drop(1).dropLast(1)
