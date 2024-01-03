@@ -23,4 +23,24 @@ class TestMixinShadow {
             }
         """.trimIndent()
     }
+
+
+    @Test
+    fun `resolve shadow names in anonymous classes`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(targets = "a.pkg.A$2")
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Shadow
+                protected abstract void aMethodAnon();
+                private void test() { this.aMethodAnon(); }
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(targets = "b.pkg.B$2")
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Shadow
+                protected abstract void bMethodAnon();
+                private void test() { this.bMethodAnon(); }
+            }
+        """.trimIndent()
+    }
 }
