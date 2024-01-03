@@ -101,6 +101,13 @@ public class A extends AParent implements AInterface {
         new A() {};
     }
 
+    public void aAnon() {
+        new A() {
+            public void aMethodAnon() {
+            }
+        };
+    }
+
     public static void supplier(Supplier<String> supplier) {
     }
 
