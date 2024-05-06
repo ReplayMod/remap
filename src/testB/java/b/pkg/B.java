@@ -102,14 +102,7 @@ public class B extends BParent implements BInterface {
         private int bField;
     }
 
-    public int notBInnerMethod() {
-        return 0;
-    }
-
     public class InnerB {
-        public int bMethod() {
-            return 0;
-        }
     }
 
     public class GenericB<T> {}

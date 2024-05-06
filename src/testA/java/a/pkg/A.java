@@ -111,14 +111,7 @@ public class A extends AParent implements AInterface {
         private int aField;
     }
 
-    public int notAInnerMethod() {
-        return 0;
-    }
-
     public class InnerA {
-        public int aMethod() {
-            return 0;
-        }
     }
 
     public class GenericA<T> {}
