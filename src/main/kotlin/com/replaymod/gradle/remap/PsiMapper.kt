@@ -706,12 +706,8 @@ internal class PsiMapper(
 
                 mixinMappings[psiClass.qualifiedName!!] = mapping
 
-                if (!mapping.fieldMappings.isEmpty()) {
-                    remapAccessors(mapping)
-                }
-                if (!mapping.methodMappings.isEmpty()) {
-                    remapMixinInjections(targetClass, mapping)
-                }
+                remapAccessors(mapping)
+                remapMixinInjections(targetClass, mapping)
             }
         })
 
