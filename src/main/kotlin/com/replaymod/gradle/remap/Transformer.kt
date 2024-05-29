@@ -106,7 +106,11 @@ class Transformer(private val map: MappingSet) {
             val analysis = try {
                 analyze1521(environment, ktFiles)
             } catch (e: NoSuchMethodError) {
-                analyze1620(environment, ktFiles)
+                try {
+                    analyze1620(environment, ktFiles)
+                } catch (e: NoSuchMethodError) {
+                    analyze200(environment, ktFiles)
+                }
             }
 
             val remappedEnv = remappedClasspath?.let {
@@ -188,7 +192,11 @@ class Transformer(private val map: MappingSet) {
         try {
             analyze1521(environment, emptyList())
         } catch (e: NoSuchMethodError) {
-            analyze1620(environment, emptyList())
+            try {
+                analyze1620(environment, emptyList())
+            } catch (e: NoSuchMethodError) {
+                analyze200(environment, emptyList())
+            }
         }
         return environment
     }

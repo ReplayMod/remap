@@ -1,12 +1,14 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.9.23"
+    kotlin("jvm") version "2.0.0"
     `maven-publish`
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions.jvmTarget = "1.8"
+    compilerOptions.jvmTarget.set(JvmTarget.JVM_1_8)
 }
 
 group = "com.github.replaymod"
@@ -23,6 +25,7 @@ val testB by sourceSets.creating
 kotlinVersion("1.5.21", isPrimaryVersion = true)
 kotlinVersion("1.6.20")
 kotlinVersion("1.9.0")
+kotlinVersion("2.0.0")
 
 dependencies {
     api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.21")
@@ -55,9 +58,9 @@ tasks.test {
 }
 
 tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        apiVersion = "1.5"
-        languageVersion = "1.5"
+    compilerOptions {
+        apiVersion.set(KotlinVersion.KOTLIN_1_5)
+        languageVersion.set(KotlinVersion.KOTLIN_1_5)
     }
 }
 
