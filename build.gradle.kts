@@ -22,6 +22,7 @@ val testB by sourceSets.creating
 kotlinVersion("1.5.21", isPrimaryVersion = true)
 kotlinVersion("1.6.20")
 kotlinVersion("1.9.0")
+kotlinVersion("2.0.0")
 
 dependencies {
     api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.21")
