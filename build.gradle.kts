@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.5.21"
+    kotlin("jvm") version "1.9.23"
     `maven-publish`
 }
 
@@ -52,6 +52,13 @@ publishing {
 
 tasks.test {
     useJUnitPlatform()
+}
+
+tasks.withType<KotlinCompile> {
+    kotlinOptions {
+        apiVersion = "1.5"
+        languageVersion = "1.5"
+    }
 }
 
 fun kotlinVersion(version: String, isPrimaryVersion: Boolean = false) {

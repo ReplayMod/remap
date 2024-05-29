@@ -4,7 +4,6 @@ import com.replaymod.gradle.remap.legacy.LegacyMapping
 import org.cadixdev.lorenz.MappingSet
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.config.ContentRoot
-import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
@@ -75,7 +74,7 @@ class Transformer(private val map: MappingSet) {
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, JavaSourceRoot(tmpDir.toFile(), ""))
             val kotlinSourceRoot = try {
                 kotlinSourceRoot1521(tmpDir.toAbsolutePath().toString(), false)
-            } catch (e: NoSuchMethodException) {
+            } catch (e: NoSuchMethodError) {
                 kotlinSourceRoot190(tmpDir.toAbsolutePath().toString(), false)
             }
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, kotlinSourceRoot)
