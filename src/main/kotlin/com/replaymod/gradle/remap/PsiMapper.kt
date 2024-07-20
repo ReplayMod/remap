@@ -361,17 +361,36 @@ internal class PsiMapper(
         if (mapped == dollarName) return
         mapped = mapped.replace('/', '.').replace('$', '.')
 
+        // Fully qualified, obvious case
         if (expr.text == name) {
             replace(expr, mapped)
             return
         }
+
         val parent: PsiElement? = expr.parent
-        if ((parent is KtUserType || parent is KtQualifiedExpression) && parent.text == name) {
-            if (valid(parent)) {
-                replace(parent, mapped)
+        val parentParent: PsiElement? = parent?.parent
+        val qualifierExpr = when {
+            // In types
+            parent is KtUserType && parent.qualifier != expr -> parent.qualifier
+            // In general code
+            parent is KtQualifiedExpression && parent.receiverExpression != expr -> parent.receiverExpression
+            // In general code when calling the constructor
+            parent is KtCallExpression && parentParent is KtDotQualifiedExpression
+                && parentParent.receiverExpression != parent -> parentParent.receiverExpression
+            else -> null
+        }
+
+        // Fully qualified, tricky cases
+        val simpleName = name.substringAfterLast(".")
+        val qualifierName = name.substringBeforeLast(".")
+        if (expr.text == simpleName && qualifierExpr?.text == qualifierName) {
+            if (valid(qualifierExpr)) {
+                replace(qualifierExpr, mapped.substringBeforeLast("."))
             }
+            replace(expr, mapped.substringAfterLast("."))
             return
         }
+
         // FIXME this incorrectly filters things like "Packet<?>" and doesn't filter same-name type aliases
         // if (expr.text != name.substring(name.lastIndexOf('.') + 1)) {
         //     return // type alias, will be remapped at its definition
