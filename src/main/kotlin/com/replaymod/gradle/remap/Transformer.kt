@@ -18,6 +18,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.Disposable
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.ExtensionPoint
 import org.jetbrains.kotlin.com.intellij.openapi.extensions.Extensions
 import org.jetbrains.kotlin.com.intellij.openapi.util.Disposer
+import org.jetbrains.kotlin.com.intellij.openapi.util.registry.Registry
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem
@@ -84,6 +85,16 @@ class Transformer(private val map: MappingSet) {
 
             // Our PsiMapper only works with the PSI tree elements, not with the faster (but kotlin-specific) classes
             config.put(JVMConfigurationKeys.USE_PSI_CLASS_FILES_READING, true)
+
+            // Mark Registry as loaded, otherwise RegistryKey will (provided a sufficiently complex project) log
+            // messages about it being accessed before it is loaded (and it won't ever be loaded naturally).
+            val loadedField = try {
+                Registry::class.java.getDeclaredField("myLoaded")
+            } catch (_: NoSuchFieldException) {
+                Registry::class.java.getDeclaredField("isLoaded")
+            }
+            loadedField.isAccessible = true
+            loadedField.set(Registry.getInstance(), true)
 
             val environment = KotlinCoreEnvironment.createForProduction(
                     disposable,
