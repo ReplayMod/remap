@@ -68,4 +68,30 @@ class TestReferences {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps same-project kotlin class references`() {
+        TestData.transformer.remap(mapOf(
+            "test.kt" to """
+                import a.pkg.UserA
+                import a.pkg.UserA.InnerA
+                fun test(): UserA {
+                    return UserA()
+                }
+                fun test(): InnerA {
+                    return InnerA()
+                }
+            """.trimIndent(),
+            "a/pkg/UserA.kt" to "package a.pkg; class UserA { class InnerA {} }",
+        ))["test.kt"]?.first shouldBe """
+            import b.pkg.UserB
+            import b.pkg.UserB.InnerB
+            fun test(): UserB {
+                return UserB()
+            }
+            fun test(): InnerB {
+                return InnerB()
+            }
+        """.trimIndent()
+    }
 }

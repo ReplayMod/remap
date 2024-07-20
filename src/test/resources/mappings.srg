@@ -32,3 +32,5 @@ CL: a/pkg/AParent b/pkg/BParent
 MD: a/pkg/AParent/aParentMethod ()V b/pkg/BParent/bParentMethod ()V
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V
+CL: a/pkg/UserA b/pkg/UserB
+CL: a/pkg/UserA$InnerA b/pkg/UserB$InnerB

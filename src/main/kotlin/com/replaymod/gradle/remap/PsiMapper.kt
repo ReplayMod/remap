@@ -24,6 +24,7 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
+import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
 import org.jetbrains.kotlin.resolve.BindingContext
@@ -356,6 +357,19 @@ internal class PsiMapper(
     private fun map(expr: PsiElement, resolved: PsiQualifiedNamedElement) {
         val name = resolved.qualifiedName ?: return
         val dollarName = (if (resolved is PsiClass) resolved.dollarQualifiedName else name) ?: return
+        map(expr, name, dollarName)
+    }
+
+    private fun map(expr: PsiElement, resolved: KtClassOrObject) {
+        val fqName = resolved.fqName ?: return
+        val classes = generateSequence(resolved) { it.getParentOfType<KtClassOrObject>(true) }.toMutableList()
+        classes.reverse()
+        val dollarName = resolved.containingKtFile.packageFqName.child(classes.removeFirst().nameAsName!!).asString() +
+            classes.joinToString("") { '$' + it.name!! }
+        map(expr, fqName.asString(), dollarName)
+    }
+
+    private fun map(expr: PsiElement, name: String, dollarName: String) {
         val mapping = map.findClassMapping(dollarName) ?: return
         var mapped = mapping.fullDeobfuscatedName
         if (mapped == dollarName) return
@@ -404,6 +418,7 @@ internal class PsiMapper(
             is PsiMethod -> map(expr, resolved)
             is KtNamedFunction -> map(expr, resolved.getRepresentativeLightMethod())
             is PsiClass, is PsiPackage -> map(expr, resolved as PsiQualifiedNamedElement)
+            is KtClassOrObject -> map(expr, resolved)
         }
     }
 
