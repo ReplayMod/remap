@@ -97,7 +97,7 @@ internal class PsiMapper(
         )
 
     private fun map(expr: PsiElement, field: PsiField) {
-        val fieldName = field.name ?: return
+        val fieldName = field.name
         val declaringClass = field.containingClass ?: return
         val name = declaringClass.dollarQualifiedName ?: return
         var mapping: ClassMapping<*, *>? = this.mixinMappings[declaringClass.qualifiedName ?: return]
@@ -487,7 +487,7 @@ internal class PsiMapper(
                     methodName.startsWith("is") -> methodName.substring(2)
                     methodName.startsWith("get") || methodName.startsWith("set") -> methodName.substring(3)
                     else -> null
-                }?.decapitalize()
+                }?.replaceFirstChar { it.lowercase() }
 
                 val target = annotation.parameterList.attributes.find {
                     it.name == null || it.name == "value"
