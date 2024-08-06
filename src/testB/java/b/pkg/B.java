@@ -98,6 +98,13 @@ public class B extends BParent implements BInterface {
         new B() {};
     }
 
+    public void bAnon() {
+        new B() {
+            public void bMethodAnon() {
+            }
+        };
+    }
+
     public class Inner {
         private int bField;
     }
