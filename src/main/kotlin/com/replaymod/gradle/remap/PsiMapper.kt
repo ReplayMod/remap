@@ -41,6 +41,7 @@ internal class PsiMapper(
         private val bindingContext: BindingContext,
         private val patterns: PsiPatterns?
 ) {
+    private val mixinTargets = mutableMapOf<String, PsiClass>()
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val aliased = mutableSetOf<String>()
     private val errors = mutableListOf<Pair<Int, String>>()
@@ -314,20 +315,22 @@ internal class PsiMapper(
         var declaringClass: PsiClass? = method.containingClass ?: return null
         val parentQueue = ArrayDeque<PsiClass>()
         parentQueue.offer(declaringClass)
-        var mapping: ClassMapping<*, *>? = null
 
         var name = declaringClass!!.qualifiedName
-        if (name != null) {
-            // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
-            mapping = mixinMappings[name]
+        val mixinTargetClass = mixinTargets[name]
+        // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
+        if (mixinTargetClass != null) {
+            parentQueue.offer(mixinTargetClass)
             // but only if the method conceptually belongs to the target class
             val isShadow = method.getAnnotation(CLASS_SHADOW) != null
             val isOverwrite = method.getAnnotation(CLASS_OVERWRITE) != null
             val isOverride = method.getAnnotation(CLASS_OVERRIDE) != null
-            if (mapping != null && !isShadow && !isOverwrite && !isOverride) {
+            if (!isShadow && !isOverwrite && !isOverride) {
                 return null // otherwise, it belongs to the mixin and never gets remapped
             }
         }
+
+        var mapping: ClassMapping<*, *>? = null
         while (true) {
             if (mapping != null) {
                 val mapped = mapping.findMethodMapping(getSignature(method))
@@ -473,7 +476,7 @@ internal class PsiMapper(
         return null
     }
 
-    private fun remapAccessors(mapping: ClassMapping<*, *>) {
+    private fun remapAccessors(targetClass: PsiClass, mapping: ClassMapping<*, *>) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 val accessorAnnotation = method.getAnnotation(CLASS_ACCESSOR)
@@ -494,7 +497,7 @@ internal class PsiMapper(
                 }?.literalValue ?: targetByName ?: throw IllegalArgumentException("Cannot determine accessor target for $method")
 
                 val mapped = if (invokerAnnotation != null) {
-                    mapping.methodMappings.find { it.obfuscatedName == target }?.deobfuscatedName
+                    targetClass.findMethodsByName(target, false).firstOrNull()?.let { findMapping(it) }?.deobfuscatedName
                 } else {
                     mapping.findFieldMapping(target)?.deobfuscatedName
                 }
@@ -704,9 +707,10 @@ internal class PsiMapper(
 
                 val (targetClass, mapping) = getMixinTarget(annotation) ?: return
 
+                mixinTargets[psiClass.qualifiedName!!] = targetClass
                 mixinMappings[psiClass.qualifiedName!!] = mapping
 
-                remapAccessors(mapping)
+                remapAccessors(targetClass, mapping)
                 remapMixinInjections(targetClass, mapping)
             }
         })
