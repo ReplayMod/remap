@@ -333,7 +333,7 @@ internal class PsiMapper(
         var mapping: ClassMapping<*, *>? = null
         while (true) {
             if (mapping != null) {
-                val mapped = mapping.findMethodMapping(getSignature(method))
+                val mapped = mapping.findMethodMapping(getSignature(method) ?: return null)
                 if (mapped != null) {
                     return mapped
                 }

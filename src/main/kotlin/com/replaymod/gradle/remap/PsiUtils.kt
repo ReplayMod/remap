@@ -42,29 +42,32 @@ internal val PsiAnnotationMemberValue.resolvedLiteralValues: List<Pair<PsiLitera
     }
 
 internal object PsiUtils {
-    fun getSignature(method: PsiMethod): MethodSignature = MethodSignature(method.name, getDescriptor(method))
+    fun getSignature(method: PsiMethod): MethodSignature? {
+        return MethodSignature(method.name, getDescriptor(method) ?: return null)
+    }
 
-    private fun getDescriptor(method: PsiMethod): MethodDescriptor = MethodDescriptor(
-            method.parameterList.parameters.map { getFieldType(it.type) },
-            getType(method.returnType)
-    )
+    private fun getDescriptor(method: PsiMethod): MethodDescriptor? {
+        return MethodDescriptor(
+            method.parameterList.parameters.map { getFieldType(it.type) ?: return null },
+            getType(method.returnType) ?: return null
+        )
+    }
 
-    private fun getFieldType(type: PsiType?): FieldType = when (val erasedType = TypeConversionUtil.erasure(type)) {
+    private fun getFieldType(type: PsiType?): FieldType? = when (val erasedType = TypeConversionUtil.erasure(type)) {
         is PsiPrimitiveType -> FieldType.of(erasedType.kind.binaryName)
         is PsiArrayType -> {
             val array = erasedType as PsiArrayType?
             ArrayType(array!!.arrayDimensions, getFieldType(array.deepComponentType))
         }
         is PsiClassType -> {
-            val resolved = erasedType.resolve() ?: throw NullPointerException("Failed to resolve type $erasedType")
-            val qualifiedName = resolved.dollarQualifiedName
-                    ?: throw NullPointerException("Type $erasedType has no qualified name.")
+            val resolved = erasedType.resolve() ?: return null
+            val qualifiedName = resolved.dollarQualifiedName ?: return null
             ObjectType(qualifiedName)
         }
         else -> throw IllegalArgumentException("Cannot translate type " + erasedType!!)
     }
 
-    private fun getType(type: PsiType?): Type = if (TypeConversionUtil.isVoidType(type)) {
+    private fun getType(type: PsiType?): Type? = if (TypeConversionUtil.isVoidType(type)) {
         VoidType.INSTANCE
     } else {
         getFieldType(type)
