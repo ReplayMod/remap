@@ -114,5 +114,7 @@ public class A extends AParent implements AInterface {
     public class InnerA {
     }
 
-    public class GenericA<T> {}
+    public class GenericA<T> {
+        public void aMethod(T t) {}
+    }
 }

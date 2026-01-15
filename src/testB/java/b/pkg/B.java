@@ -105,5 +105,7 @@ public class B extends BParent implements BInterface {
     public class InnerB {
     }
 
-    public class GenericB<T> {}
+    public class GenericB<T> {
+        public void bMethod(T t) {}
+    }
 }

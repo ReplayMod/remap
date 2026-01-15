@@ -330,10 +330,24 @@ internal class PsiMapper(
             }
         }
 
+        val signatures = mutableSetOf<MethodSignature>()
+        getSignature(method)?.let { signatures.add(it) }
+        // If the method overrides a method with generic parameters or return type, we need to look for the signature
+        // of the overridden method as well.
+        // E.g. the overridden method may accept a generic `T` (where `T` is generic at the class level, with `T : Any`)
+        // and as such has `java/lang/Object` in its signature, while the overriding class may specify `T` as `MyObject`
+        // and therefore its overriding method is specialized to accept MyObj and as such has `MyObj` in its signature
+        // (and Java would generate a bridge method to do the actual overriding, but we don't see that one here).
+        method.findSuperMethods().mapNotNullTo(signatures) { getSignature(it) }
+
+        if (signatures.isEmpty()) {
+            return null
+        }
+
         var mapping: ClassMapping<*, *>? = null
         while (true) {
             if (mapping != null) {
-                val mapped = mapping.findMethodMapping(getSignature(method) ?: return null)
+                val mapped = signatures.firstNotNullOfOrNull { mapping.findMethodMapping(it) }
                 if (mapped != null) {
                     return mapped
                 }

@@ -86,4 +86,21 @@ class TestReferences {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps method override with narrowed argument type`() {
+        TestData.remap("""
+            class Test extends a.pkg.A.GenericA<a.pkg.A> {
+                @Override
+                public void aMethod(a.pkg.A t) {
+                }
+            }
+        """.trimIndent()) shouldBe """
+            class Test extends b.pkg.B.GenericB<b.pkg.B> {
+                @Override
+                public void bMethod(b.pkg.B t) {
+                }
+            }
+        """.trimIndent()
+    }
 }

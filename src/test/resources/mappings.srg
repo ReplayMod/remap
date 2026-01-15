@@ -28,6 +28,7 @@ CL: a/pkg/A$Inner b/pkg/B$Inner
 FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
 CL: a/pkg/A$InnerA b/pkg/B$InnerB
 CL: a/pkg/A$GenericA b/pkg/B$GenericB
+MD: a/pkg/A$GenericA/aMethod (Ljava/lang/Object;)V b/pkg/B$GenericB/bMethod (Ljava/lang/Object;)V
 CL: a/pkg/AParent b/pkg/BParent
 MD: a/pkg/AParent/aParentMethod ()V b/pkg/BParent/bParentMethod ()V
 CL: a/pkg/AInterface b/pkg/BInterface
