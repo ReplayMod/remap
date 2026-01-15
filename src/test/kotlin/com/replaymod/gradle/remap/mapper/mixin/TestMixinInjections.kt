@@ -118,6 +118,41 @@ class TestMixinInjections {
     }
 
     @Test
+    fun `considers synthetic bridge methods in ambiguity test`() {
+        val (_, errors) = TestData.remapWithErrors("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "aSpecializableMethod")
+                private void test() {}
+            }
+        """.trimIndent())
+        errors shouldHaveSize 1
+        val (line, error) = errors[0]
+        line shouldBe 2
+        error shouldContain "aSpecializableMethod"
+        error shouldContain "()La/pkg/AParent;"
+        error shouldContain "()La/pkg/A;"
+
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "aSpecializableMethod()La/pkg/A;")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "aSpecializableMethod()La/pkg/AParent;")
+                private void testBridge() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "bSpecializableMethod()Lb/pkg/B;")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "bSpecializableMethod()Lb/pkg/BParent;")
+                private void testBridge() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps constructor target`() {
         TestData.remap("""
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)

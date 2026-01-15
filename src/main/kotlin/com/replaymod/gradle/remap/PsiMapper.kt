@@ -1,6 +1,7 @@
 package com.replaymod.gradle.remap
 
 import com.replaymod.gradle.remap.PsiUtils.getSignature
+import org.cadixdev.bombe.type.MethodDescriptor
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.cadixdev.lorenz.MappingSet
 import org.cadixdev.lorenz.model.ClassMapping
@@ -31,6 +32,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
+import org.objectweb.asm.tree.ClassNode
 import java.util.*
 
 internal class PsiMapper(
@@ -368,6 +370,33 @@ internal class PsiMapper(
         }
     }
 
+    private fun findExactMapping(declaringClass: PsiClass, name: String, desc: String): MethodMapping? {
+        val signature = MethodSignature(name, MethodDescriptor.of(desc))
+
+        val parentQueue = ArrayDeque<PsiClass>()
+        parentQueue.offer(declaringClass)
+
+        while (true) {
+            val currentClass = parentQueue.poll() ?: return null
+
+            val mapping = currentClass.dollarQualifiedName?.let { map.findClassMapping(it) }
+            if (mapping != null) {
+                val mapped = mapping.findMethodMapping(signature)
+                if (mapped != null) {
+                    return mapped
+                }
+            }
+
+            val superClass = currentClass.superClass
+            if (superClass != null) {
+                parentQueue.offer(superClass)
+            }
+            for (anInterface in currentClass.interfaces) {
+                parentQueue.offer(anInterface)
+            }
+        }
+    }
+
     private fun map(expr: PsiElement, resolved: PsiQualifiedNamedElement) {
         val name = resolved.qualifiedName ?: return
         val dollarName = (if (resolved is PsiClass) resolved.dollarQualifiedName else name) ?: return
@@ -507,7 +536,7 @@ internal class PsiMapper(
                 }?.literalValue ?: targetByName ?: throw IllegalArgumentException("Cannot determine accessor target for $method")
 
                 val mapped = if (invokerAnnotation != null) {
-                    targetClass.findMethodsByName(target, false).firstOrNull()?.let { findMapping(it) }?.deobfuscatedName
+                    findExactMapping(targetClass, target, ClassUtil.getAsmMethodSignature(method))?.deobfuscatedName
                 } else {
                     mapping.findFieldMapping(target)?.deobfuscatedName
                 }
@@ -525,7 +554,12 @@ internal class PsiMapper(
         })
     }
 
-    private fun remapMixinInjections(targetClass: PsiClass, mapping: ClassMapping<*, *>) {
+    private fun remapMixinInjections(
+        targetClass: PsiClass,
+        targetClassNode: ClassNode?,
+        remappedTargetClassNode: ClassNode?,
+        mapping: ClassMapping<*, *>,
+    ) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 val methodAttrib = method.annotations.firstNotNullOfOrNull { it.findDeclaredAttributeValue("method") }
@@ -535,6 +569,63 @@ internal class PsiMapper(
                     } else {
                         literalValue to null
                     }
+
+                    if (targetClassNode != null) {
+                        val targetMethods = targetClassNode.methods.filter { it.name == targetName }
+
+                        val targetMethod = if (targetDesc != null) {
+                            targetMethods.find { it.desc == targetDesc }
+                        } else {
+                            if (targetMethods.size > 1) {
+                                error(literalExpr,
+                                    "Ambiguous mixin method \"$targetName\" may refer to any of: " +
+                                            targetMethods.joinToString { "\"${it.name}${it.desc}\"" })
+                            }
+                            targetMethods.firstOrNull()
+                        }
+
+                        val mappedName = targetMethod?.let { findExactMapping(targetClass, it.name, it.desc) }?.deobfuscatedName ?: targetName
+
+                        val mappedDesc = if (remappedTargetClassNode != null) {
+                            val mappedMethods = remappedTargetClassNode.methods.filter { it.name == mappedName }
+                            if (mappedMethods.isEmpty()) {
+                                // If we can't find the mapped target method, it might be added by a third-party patch
+                                // at runtime (or the mapping is missing).
+                                // To be safe, we'll use the full  descriptor if we have one, so we don't inject
+                                // into the wrong thing.
+                                (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) } ?: ""
+                            } else if (mappedMethods.size == 1) {
+                                // If there's exactly one such method, the descriptor can be omitted.
+                                ""
+                            } else {
+                                // If there's multiple such methods, we need to include the descriptor.
+                                val mappedDesc = (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) }
+                                if (mappedMethods.none { it.desc == mappedDesc }) {
+                                    error(literalExpr,
+                                        "Mixin target \"$targetName\" cannot be automatically remapped " +
+                                                "as there are multiple methods with the same remapped name: " +
+                                                mappedMethods.joinToString { "\"${it.name}${it.desc}\"" })
+                                }
+                                mappedDesc ?: ""
+                            }
+                        } else {
+                            // Fallback using only mappings file, which isn't necessarily exhaustive
+                            val mappedMethods = mapping.methodMappings.filter { it.deobfuscatedName == mappedName }
+                            val ambiguousName = mappedMethods.size > 1
+                            if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
+                        }
+                        val mapped = mappedName + mappedDesc
+
+                        if (mapped != literalValue && valid(literalExpr)) {
+                            replace(literalExpr, '"'.toString() + mapped + '"'.toString())
+                        }
+
+                        continue
+                    }
+
+                    // Fallback using only PSI.
+                    // This won't work for synthetic methods as those aren't visible at the PSI level.
+
                     val targetMethods = targetClass.findMethodsByName(targetName, false)
                     val targetMethod = if (targetDesc != null) {
                         targetMethods.find {
@@ -716,12 +807,15 @@ internal class PsiMapper(
                 remapAtTargets()
 
                 val (targetClass, mapping) = getMixinTarget(annotation) ?: return
+                val targetClassNode = targetClass.getAsmTree()
+                val remappedTargetClass = findPsiClass(mapping.fullDeobfuscatedName, remappedProject ?: file.project)
+                val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
 
                 mixinTargets[psiClass.qualifiedName!!] = targetClass
                 mixinMappings[psiClass.qualifiedName!!] = mapping
 
                 remapAccessors(targetClass, mapping)
-                remapMixinInjections(targetClass, mapping)
+                remapMixinInjections(targetClass, targetClassNode, remappedTargetClassNode, mapping)
             }
         })
 

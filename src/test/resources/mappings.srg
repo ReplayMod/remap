@@ -23,6 +23,7 @@ MD: a/pkg/A/aOverloaded (I)V b/pkg/B/bOverloaded (I)V
 MD: a/pkg/A/aOverloaded (Z)V b/pkg/B/bOverloaded (Z)V
 MD: a/pkg/A/commonOverloaded (Ljava/lang/Object;)V b/pkg/B/commonOverloaded (Ljava/lang/Object;)V
 MD: a/pkg/A/commonOverloaded (La/pkg/A;)V b/pkg/B/commonOverloaded (La/pkg/B;)V
+MD: a/pkg/A/aSpecializableMethod ()La/pkg/A; b/pkg/B/bSpecializableMethod ()Lb/pkg/B;
 CL: a/pkg/A$1 b/pkg/B$1
 FD: a/pkg/A$1/aAnonField b/pkg/B$1/bAnonField
 CL: a/pkg/A$Inner b/pkg/B$Inner
@@ -32,6 +33,7 @@ CL: a/pkg/A$GenericA b/pkg/B$GenericB
 MD: a/pkg/A$GenericA/aMethod (Ljava/lang/Object;)V b/pkg/B$GenericB/bMethod (Ljava/lang/Object;)V
 CL: a/pkg/AParent b/pkg/BParent
 MD: a/pkg/AParent/aParentMethod ()V b/pkg/BParent/bParentMethod ()V
+MD: a/pkg/AParent/aSpecializableMethod ()La/pkg/AParent; b/pkg/BParent/bSpecializableMethod ()Lb/pkg/BParent;
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V
 CL: a/pkg/UserA b/pkg/UserB

@@ -100,6 +100,11 @@ public class B extends BParent implements BInterface {
         };
     }
 
+    @Override
+    public B bSpecializableMethod() {
+        return this;
+    }
+
     public class Inner {
         private int bField;
     }

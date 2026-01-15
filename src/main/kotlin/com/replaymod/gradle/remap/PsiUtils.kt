@@ -24,6 +24,7 @@ import org.objectweb.asm.ClassReader
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.ClassWriter
 import org.objectweb.asm.Opcodes
+import org.objectweb.asm.tree.ClassNode
 import java.nio.charset.StandardCharsets
 
 internal data class FullyQualifiedClassName(val pkg: String, val name: List<String>) {
@@ -152,6 +153,44 @@ internal val PsiAnnotationMemberValue.resolvedLiteralValues: List<Pair<PsiLitera
         is PsiArrayInitializerMemberValue -> initializers.mapNotNull { it.resolvedLiteralValue }
         else -> listOfNotNull(resolvedLiteralValue)
     }
+
+internal fun PsiClass.getAsmTree(): ClassNode? {
+    if (containingClass != null) {
+        // For inner classes, `containingFile` returns the file of the outer class.
+        // So for those we'll need to locate the proper class file ourselves.
+        // JavaPsiFacade won't be able to find "anonymous" classes (e.g. "MyClass$1"), we'll have to find those ourselves
+        val outerFile = containingFile?.virtualFile ?: return null
+        if (outerFile.extension != "class") return null
+
+        val folder = outerFile.parent ?: return null
+        val classFileName = generateSequence(this) { it.containingClass }
+            .toList()
+            .asReversed()
+            .joinToString("$", postfix = ".class") { it.name ?: "" }
+        val classFile = folder.findChild(classFileName) ?: return null
+        return classFile.readAsmTree()
+    }
+    return containingFile?.virtualFile?.getAsmTree()
+}
+
+private val ASM_TREE_KEY = Key<ClassNode>("ASM_TREE")
+internal fun VirtualFile.getAsmTree(): ClassNode? {
+    val cached = getUserData(ASM_TREE_KEY)
+    if (cached != null) {
+        return cached
+    } else {
+        val value = readAsmTree()
+        putUserData(ASM_TREE_KEY, value)
+        return value
+    }
+}
+internal fun VirtualFile.readAsmTree(): ClassNode? {
+    val bytes = contentsToByteArray()
+    val node = ClassNode()
+    val reader = ClassReader(bytes)
+    reader.accept(node, ClassReader.SKIP_DEBUG or ClassReader.SKIP_CODE or ClassReader.SKIP_FRAMES)
+    return node
+}
 
 internal object PsiUtils {
     fun getSignature(method: PsiMethod): MethodSignature? {

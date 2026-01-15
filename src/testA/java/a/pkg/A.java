@@ -103,6 +103,11 @@ public class A extends AParent implements AInterface {
         };
     }
 
+    @Override
+    public A aSpecializableMethod() {
+        return this;
+    }
+
     public static void supplier(Supplier<String> supplier) {
     }
 

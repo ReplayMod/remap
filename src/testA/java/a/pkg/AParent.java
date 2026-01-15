@@ -5,6 +5,10 @@ public class AParent {
         return this;
     }
 
+    public AParent aSpecializableMethod() {
+        return this;
+    }
+
     public AParent() {}
     public AParent(A arg) {}
 }
