@@ -1,5 +1,6 @@
 CL: a/pkg/A b/pkg/B
 FD: a/pkg/A/a b/pkg/B/b
+FD: a/pkg/A/aPub b/pkg/B/bPub
 FD: a/pkg/A/aField b/pkg/B/bField
 MD: a/pkg/A/aMethod ()V b/pkg/B/bMethod ()V
 MD: a/pkg/A/getA ()La/pkg/A; b/pkg/B/getB ()Lb/pkg/B;

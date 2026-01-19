@@ -273,6 +273,29 @@ class TestMixinInjections {
     }
 
     @Test
+    fun `remaps @At target of field which needs to be resolved`() {
+        TestData.remap($$"""
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @Inject(method = "aMethod", at = @At(target = "La/pkg/A;a:La/pkg/A;"))
+                private void testPrivate() {}
+                @Inject(method = "aMethod", at = @At(target = "La/pkg/A$InnerA;aPub:La/pkg/A;"))
+                private void testPublic() {}
+            }
+        """.trimIndent()) shouldBe $$"""
+            import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;b:Lb/pkg/B;"))
+                private void testPrivate() {}
+                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B$InnerB;bPub:Lb/pkg/B;"))
+                private void testPublic() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps @At target in constant`() {
         TestData.remap("""
             import org.spongepowered.asm.mixin.injection.At; import org.spongepowered.asm.mixin.injection.Inject;

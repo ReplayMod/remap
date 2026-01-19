@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 
 public class A extends AParent implements AInterface {
     private A a;
+    public A aPub;
     private int aField;
 
     public A() {
@@ -123,7 +124,7 @@ public class A extends AParent implements AInterface {
         private int aField;
     }
 
-    public class InnerA {
+    public class InnerA extends A {
     }
 
     public class GenericA<T> {

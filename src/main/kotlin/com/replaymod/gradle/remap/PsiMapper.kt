@@ -44,6 +44,7 @@ internal class PsiMapper(
         private val bindingContext: BindingContext,
         private val patterns: PsiPatterns?
 ) {
+    private var mixinTarget: PsiClass? = null
     private val mixinTargets = mutableMapOf<String, PsiClass>()
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val aliased = mutableSetOf<String>()
@@ -720,12 +721,29 @@ internal class PsiMapper(
         } else {
             null
         }
+        val fieldPsi = if (method) {
+            null
+        } else {
+            generateSequence(ownerPsi) { it.superClass }
+                .firstNotNullOfOrNull { psiClass ->
+                    val canAccessPrivateFields = psiClass == ownerPsi && psiClass == mixinTarget
+                    psiClass.fields.find { psiField ->
+                        psiField.name == name && (canAccessPrivateFields || !psiField.hasModifier(JvmModifier.PRIVATE))
+                    }
+                }
+        }
 
         val builder = StringBuilder(signature.length + 32)
         val mapping = remapInternalType(owner, builder)
         var mapped: String? = null
         if (methodPsi != null) {
             mapped = findMapping(methodPsi)?.deobfuscatedName
+        }
+        if (fieldPsi != null) {
+            val mapping = fieldPsi.containingClass?.dollarQualifiedName?.let { map.findClassMapping(it) }
+            if (mapping != null) {
+                mapped = mapping.findFieldMapping(name)?.deobfuscatedName
+            }
         }
         if (mapped == null && mapping != null) {
             mapped = (if (method) {
@@ -822,9 +840,13 @@ internal class PsiMapper(
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
 
+                val (targetClass, mapping) = getMixinTarget(annotation) ?: Pair(null, null)
+                mixinTarget = targetClass
+
                 remapAtTargets()
 
-                val (targetClass, mapping) = getMixinTarget(annotation) ?: return
+                targetClass ?: return
+                mapping ?: return
                 val targetClassNode = targetClass.getAsmTree()
                 val remappedTargetClass = findPsiClass(mapping.fullDeobfuscatedName, remappedProject ?: file.project)
                 val remappedTargetClassNode = remappedTargetClass?.getAsmTree()

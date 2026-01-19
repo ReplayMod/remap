@@ -2,6 +2,7 @@ package b.pkg;
 
 public class B extends BParent implements BInterface {
     private B b;
+    public B bPub;
     private int bField;
 
     public B() {
@@ -114,7 +115,7 @@ public class B extends BParent implements BInterface {
         private int bField;
     }
 
-    public class InnerB {
+    public class InnerB extends B {
     }
 
     public class GenericB<T> {
