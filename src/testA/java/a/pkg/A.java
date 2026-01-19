@@ -98,7 +98,9 @@ public class A extends AParent implements AInterface {
 
     @Override
     public void aInterfaceMethod() {
-        new A() {};
+        new A() {
+            private int aAnonField;
+        };
     }
 
     public static void supplier(Supplier<String> supplier) {

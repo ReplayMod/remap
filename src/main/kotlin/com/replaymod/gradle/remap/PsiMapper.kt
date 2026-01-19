@@ -12,7 +12,6 @@ import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
 import org.jetbrains.kotlin.com.intellij.psi.*
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.com.intellij.psi.util.ClassUtil
 import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
 import org.jetbrains.kotlin.descriptors.FunctionDescriptor
@@ -92,10 +91,7 @@ internal class PsiMapper(
     }
 
     private fun findPsiClass(name: String, project: Project = file.project) =
-        JavaPsiFacade.getInstance(project).findClass(
-            name.replace('/', '.').replace('$', '.'),
-            GlobalSearchScope.allScope(project),
-        )
+        findPsiClass(project, name)
 
     private fun map(expr: PsiElement, field: PsiField) {
         val fieldName = field.name

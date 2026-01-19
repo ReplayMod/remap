@@ -27,6 +27,7 @@ kotlinVersion("2.0.0")
 dependencies {
     api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.21")
     implementation(kotlin("stdlib"))
+    implementation("org.ow2.asm:asm-tree:9.9.1")
     api("org.cadixdev:lorenz:0.5.0")
     runtimeOnly("net.java.dev.jna:jna:5.10.0") // don't strictly need this but IDEA spams log without
 

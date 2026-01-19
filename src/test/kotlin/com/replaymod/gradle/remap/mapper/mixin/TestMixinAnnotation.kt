@@ -61,11 +61,13 @@ class TestMixinAnnotation {
     @Test
     fun `remaps with anonymous inner class target`() {
         TestData.remap("""
+            import org.spongepowered.asm.mixin.Shadow;
             @org.spongepowered.asm.mixin.Mixin(targets = "a.pkg.A${'$'}1")
-            class MixinA {}
+            class MixinA { @Shadow private int aAnonField; }
         """.trimIndent()) shouldBe """
+            import org.spongepowered.asm.mixin.Shadow;
             @org.spongepowered.asm.mixin.Mixin(targets = "b.pkg.B${'$'}1")
-            class MixinA {}
+            class MixinA { @Shadow private int bAnonField; }
         """.trimIndent()
     }
 }

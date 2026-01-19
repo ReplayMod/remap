@@ -95,7 +95,9 @@ public class B extends BParent implements BInterface {
 
     @Override
     public void bInterfaceMethod() {
-        new B() {};
+        new B() {
+            private int bAnonField;
+        };
     }
 
     public class Inner {
