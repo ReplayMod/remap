@@ -426,9 +426,18 @@ internal class PsiMapper(
             return
         }
 
+        val qualifiedExpr = when {
+            // Java
+            expr is PsiJavaCodeReferenceElement -> expr.referenceNameElement
+            // Kotlin
+            else -> expr
+        }
         val parent: PsiElement? = expr.parent
         val parentParent: PsiElement? = parent?.parent
         val qualifierExpr = when {
+            // Java
+            expr is PsiJavaCodeReferenceElement -> expr.qualifier
+            // Kotlin
             // In types
             parent is KtUserType && parent.qualifier != expr -> parent.qualifier
             // In general code
@@ -442,11 +451,11 @@ internal class PsiMapper(
         // Fully qualified, tricky cases
         val simpleName = name.substringAfterLast(".")
         val qualifierName = name.substringBeforeLast(".")
-        if (expr.text == simpleName && qualifierExpr?.text == qualifierName) {
+        if (qualifiedExpr?.text == simpleName && qualifierExpr?.text == qualifierName) {
             if (valid(qualifierExpr)) {
                 replace(qualifierExpr, mapped.substringBeforeLast("."))
             }
-            replace(expr, mapped.substringAfterLast("."))
+            replace(qualifiedExpr, mapped.substringAfterLast("."))
             return
         }
 

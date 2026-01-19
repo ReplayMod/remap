@@ -74,6 +74,9 @@ class TestReferences {
                 a.pkg.A.InnerA test() {
                     return new a.pkg.A.InnerA();
                 }
+                a.pkg.AGeneric<a.pkg.A> test() {
+                    return new a.pkg.AGeneric();
+                }
             }
         """.trimIndent()) shouldBe """
             class test {
@@ -82,6 +85,9 @@ class TestReferences {
                 }
                 b.pkg.B.InnerB test() {
                     return new b.pkg.B.InnerB();
+                }
+                b.pkg.BGeneric<b.pkg.B> test() {
+                    return new b.pkg.BGeneric();
                 }
             }
         """.trimIndent()

@@ -38,5 +38,6 @@ MD: a/pkg/AParent/aSpecializableMethod ()La/pkg/AParent; b/pkg/BParent/bSpeciali
 MD: a/pkg/AParent/aSpecializableMethodWithChangingSignature ()La/pkg/AParent; b/pkg/BParent/bSpecializableMethodWithChangingSignature (I)Lb/pkg/BParent;
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V
+CL: a/pkg/AGeneric b/pkg/BGeneric
 CL: a/pkg/UserA b/pkg/UserB
 CL: a/pkg/UserA$InnerA b/pkg/UserB$InnerB
