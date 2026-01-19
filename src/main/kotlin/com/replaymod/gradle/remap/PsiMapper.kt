@@ -31,6 +31,7 @@ import org.jetbrains.kotlin.resolve.BindingContext
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
+import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.tree.ClassNode
@@ -882,7 +883,9 @@ internal class PsiMapper(
                         val target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
                         if (target is SyntheticJavaPropertyDescriptor) {
                             map(expression, target)
-                        } else if (target != null && (target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED) {
+                        } else if (target != null
+                            && ((target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED
+                                    || target is SamConstructorDescriptor)) {
                             val targetPsi = target.findPsi()
                             if (targetPsi != null) {
                                 map(expression, targetPsi)

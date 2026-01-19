@@ -94,4 +94,19 @@ class TestReferences {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps SAM constructors`() {
+        TestData.remapKt("""
+            import a.pkg.AInterface
+            fun test(): AInterface {
+                return AInterface {}
+            }
+        """.trimIndent()) shouldBe """
+            import b.pkg.BInterface
+            fun test(): BInterface {
+                return BInterface {}
+            }
+        """.trimIndent()
+    }
 }
