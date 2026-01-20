@@ -153,6 +153,27 @@ class TestMixinInjections {
     }
 
     @Test
+    fun `remaps to unambiguous target with changed signature even in presence of bridge method`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "aSpecializableMethodWithChangingSignature()La/pkg/A;")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "aSpecializableMethodWithChangingSignature()La/pkg/AParent;")
+                private void testBridge() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "bSpecializableMethodWithChangingSignature(I)Lb/pkg/B;")
+                private void test() {}
+                @org.spongepowered.asm.mixin.injection.Inject(method = "bSpecializableMethodWithChangingSignature(I)Lb/pkg/BParent;")
+                private void testBridge() {}
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps constructor target`() {
         TestData.remap("""
             @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)

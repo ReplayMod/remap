@@ -105,6 +105,11 @@ public class B extends BParent implements BInterface {
         return this;
     }
 
+    @Override
+    public B bSpecializableMethodWithChangingSignature(int newArgument) {
+        return this;
+    }
+
     public class Inner {
         private int bField;
     }

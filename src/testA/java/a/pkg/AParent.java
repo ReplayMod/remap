@@ -9,6 +9,10 @@ public class AParent {
         return this;
     }
 
+    public AParent aSpecializableMethodWithChangingSignature() {
+        return this;
+    }
+
     public AParent() {}
     public AParent(A arg) {}
 }

@@ -32,6 +32,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
 import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
 import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
+import org.objectweb.asm.Opcodes
 import org.objectweb.asm.tree.ClassNode
 import java.util.*
 
@@ -588,6 +589,9 @@ internal class PsiMapper(
 
                         val mappedDesc = if (remappedTargetClassNode != null) {
                             val mappedMethods = remappedTargetClassNode.methods.filter { it.name == mappedName }
+                            val matchingMethods =
+                                if (targetMethod == null) mappedMethods
+                                else mappedMethods.filter { it.access and Opcodes.ACC_SYNTHETIC == targetMethod.access and Opcodes.ACC_SYNTHETIC }
                             if (mappedMethods.isEmpty()) {
                                 // If we can't find the mapped target method, it might be added by a third-party patch
                                 // at runtime (or the mapping is missing).
@@ -597,6 +601,10 @@ internal class PsiMapper(
                             } else if (mappedMethods.size == 1) {
                                 // If there's exactly one such method, the descriptor can be omitted.
                                 ""
+                            } else if (matchingMethods.size == 1) {
+                                // If we have multiple such methods, but only one is a good match,
+                                // we need to include its descriptor.
+                                matchingMethods.single().desc
                             } else {
                                 // If there's multiple such methods, we need to include the descriptor.
                                 val mappedDesc = (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) }

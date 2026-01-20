@@ -108,6 +108,11 @@ public class A extends AParent implements AInterface {
         return this;
     }
 
+    @Override
+    public A aSpecializableMethodWithChangingSignature() {
+        return this;
+    }
+
     public static void supplier(Supplier<String> supplier) {
     }
 

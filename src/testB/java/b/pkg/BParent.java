@@ -8,4 +8,8 @@ public class BParent {
     public BParent bSpecializableMethod() {
         return this;
     }
+
+    public BParent bSpecializableMethodWithChangingSignature(int newArgument) {
+        return this;
+    }
 }
