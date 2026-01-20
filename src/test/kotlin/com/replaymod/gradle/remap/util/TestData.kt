@@ -53,6 +53,19 @@ object TestData {
         manageImports = true
     }
 
+    private fun Map<String, Pair<String, List<Pair<Int, String>>>>.expectNoErrors(): Map<String, String> {
+        return mapValues { (file, result) ->
+            val (content, errors) = result
+            if (errors.isNotEmpty()) {
+                throw AssertionError("Remapping produced errors:\n" +
+                        errors.joinToString("\n") { (line, message) ->
+                            "$file:${line + 1}: $message"
+                        })
+            }
+            content
+        }
+    }
+
     fun remap(content: String): String =
         remap("test.java", content)
     fun remap(fileName: String, content: String): String =
@@ -64,9 +77,9 @@ object TestData {
         "pattern.java" to "class Patterns {\n$patternsBefore\n}",
     ), mapOf(
         "pattern.java" to "class Patterns {\n$patternsAfter\n}",
-    ))[fileName]!!.first
+    )).expectNoErrors()[fileName]!!
     fun remapWithErrors(content: String) = transformer.remap(mapOf("test.java" to content))["test.java"]!!
 
-    fun remapKt(content: String): String = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!.first
+    fun remapKt(content: String): String = transformer.remap(mapOf("test.kt" to content)).expectNoErrors()["test.kt"]!!
     fun remapKtWithErrors(content: String) = transformer.remap(mapOf("test.kt" to content))["test.kt"]!!
 }
