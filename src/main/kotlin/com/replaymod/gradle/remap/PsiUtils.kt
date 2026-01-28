@@ -204,7 +204,7 @@ internal object PsiUtils {
         )
     }
 
-    private fun getFieldType(type: PsiType?): FieldType? = when (val erasedType = TypeConversionUtil.erasure(type)) {
+    private fun getFieldType(type: PsiType?): FieldType? { return when (val erasedType = TypeConversionUtil.erasure(type)) {
         is PsiPrimitiveType -> FieldType.of(erasedType.kind.binaryName)
         is PsiArrayType -> {
             val array = erasedType as PsiArrayType?
@@ -216,7 +216,7 @@ internal object PsiUtils {
             ObjectType(qualifiedName)
         }
         else -> throw IllegalArgumentException("Cannot translate type " + erasedType!!)
-    }
+    }}
 
     private fun getType(type: PsiType?): Type? = if (TypeConversionUtil.isVoidType(type)) {
         VoidType.INSTANCE
