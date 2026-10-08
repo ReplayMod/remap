@@ -16,8 +16,8 @@ repositories {
     maven("https://repo.spongepowered.org/repository/maven-public/")
 }
 
-val testA by sourceSets.creating
-val testB by sourceSets.creating
+val testA = sourceSets.create("testA")
+val testB = sourceSets.create("testB")
 
 kotlinVersion("1.5.21", isPrimaryVersion = true)
 kotlinVersion("1.6.20")
