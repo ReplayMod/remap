@@ -128,10 +128,10 @@ public class B extends BParent implements BInterface {
         private int bField;
     }
 
-    public class InnerB extends B {
+    public static class InnerB extends B {
     }
 
-    public class GenericB<T> {
+    public static class GenericB<T> {
         public void bMethod(T t) {}
     }
 }

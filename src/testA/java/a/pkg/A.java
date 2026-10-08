@@ -137,10 +137,10 @@ public class A extends AParent implements AInterface {
         private int aField;
     }
 
-    public class InnerA extends A {
+    public static class InnerA extends A {
     }
 
-    public class GenericA<T> {
+    public static class GenericA<T> {
         public void aMethod(T t) {}
     }
 }
