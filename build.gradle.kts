@@ -33,6 +33,7 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.7.1")
     testImplementation("io.kotest:kotest-assertions-core:4.6.3")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     testRuntimeOnly(testA.output)
     testRuntimeOnly(testB.output)
