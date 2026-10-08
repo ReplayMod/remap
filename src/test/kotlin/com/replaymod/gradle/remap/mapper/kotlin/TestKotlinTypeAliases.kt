@@ -32,11 +32,11 @@ class TestKotlinTypeAliases {
     @Test
     fun `remaps inner class alias`() {
         TestData.remapKt("""
-            typealias InnerA = a.pkg.A.InnerA
-            val test: InnerA = TODO()
+            typealias NestedA = a.pkg.A.NestedA
+            val test: NestedA = TODO()
         """.trimIndent()) shouldBe """
-            typealias InnerA = b.pkg.B.InnerB
-            val test: InnerA = TODO()
+            typealias NestedA = b.pkg.B.NestedB
+            val test: NestedA = TODO()
         """.trimIndent()
     }
 }

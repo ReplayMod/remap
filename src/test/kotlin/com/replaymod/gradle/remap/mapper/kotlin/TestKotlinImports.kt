@@ -32,11 +32,11 @@ class TestKotlinImports {
     @Test
     fun `remaps inner class import`() {
         TestData.remapKt("""
-            import a.pkg.A.InnerA
-            val test: InnerA = TODO()
+            import a.pkg.A.NestedA
+            val test: NestedA = TODO()
         """.trimIndent()) shouldBe """
-            import b.pkg.B.InnerB
-            val test: InnerB = TODO()
+            import b.pkg.B.NestedB
+            val test: NestedB = TODO()
         """.trimIndent()
     }
 
@@ -44,20 +44,20 @@ class TestKotlinImports {
     fun `remaps import alias`() {
         TestData.remapKt("""
             import a.pkg.A as AAlias
-            import a.pkg.A.InnerA as InnerA
+            import a.pkg.A.NestedA as NestedA
             import a.pkg.A.GenericA as GenericA
-            val test: InnerA = InnerA()
-            val test: AAlias.InnerA = AAlias.InnerA()
-            val test: GenericA<InnerA> = GenericA<InnerA>()
-            val test: a.pkg.A.InnerA = a.pkg.A.InnerA()
+            val test: NestedA = NestedA()
+            val test: AAlias.NestedA = AAlias.NestedA()
+            val test: GenericA<NestedA> = GenericA<NestedA>()
+            val test: a.pkg.A.NestedA = a.pkg.A.NestedA()
         """.trimIndent()) shouldBe """
             import b.pkg.B as AAlias
-            import b.pkg.B.InnerB as InnerA
+            import b.pkg.B.NestedB as NestedA
             import b.pkg.B.GenericB as GenericA
-            val test: InnerA = InnerA()
-            val test: AAlias.InnerB = AAlias.InnerB()
-            val test: GenericA<InnerA> = GenericA<InnerA>()
-            val test: b.pkg.B.InnerB = b.pkg.B.InnerB()
+            val test: NestedA = NestedA()
+            val test: AAlias.NestedB = AAlias.NestedB()
+            val test: GenericA<NestedA> = GenericA<NestedA>()
+            val test: b.pkg.B.NestedB = b.pkg.B.NestedB()
         """.trimIndent()
     }
 

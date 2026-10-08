@@ -31,15 +31,15 @@ class TestReferences {
         TestData.remap("""
             import a.pkg.A;
             class test {
-                A.InnerA test() {
-                    return new A.InnerA();
+                A.NestedA test() {
+                    return new A.NestedA();
                 }
             }
         """.trimIndent()) shouldBe """
             import b.pkg.B;
             class test {
-                B.InnerB test() {
-                    return new B.InnerB();
+                B.NestedB test() {
+                    return new B.NestedB();
                 }
             }
         """.trimIndent()
@@ -48,17 +48,17 @@ class TestReferences {
     @Test
     fun `remaps imported inner class references`() {
         TestData.remap("""
-            import a.pkg.A.InnerA;
+            import a.pkg.A.NestedA;
             class test {
-                InnerA test() {
-                    return new InnerA();
+                NestedA test() {
+                    return new NestedA();
                 }
             }
         """.trimIndent()) shouldBe """
-            import b.pkg.B.InnerB;
+            import b.pkg.B.NestedB;
             class test {
-                InnerB test() {
-                    return new InnerB();
+                NestedB test() {
+                    return new NestedB();
                 }
             }
         """.trimIndent()
@@ -71,8 +71,8 @@ class TestReferences {
                 a.pkg.A test() {
                     return new a.pkg.A();
                 }
-                a.pkg.A.InnerA test() {
-                    return new a.pkg.A.InnerA();
+                a.pkg.A.NestedA test() {
+                    return new a.pkg.A.NestedA();
                 }
                 a.pkg.AGeneric<a.pkg.A> test() {
                     return new a.pkg.AGeneric();
@@ -83,8 +83,8 @@ class TestReferences {
                 b.pkg.B test() {
                     return new b.pkg.B();
                 }
-                b.pkg.B.InnerB test() {
-                    return new b.pkg.B.InnerB();
+                b.pkg.B.NestedB test() {
+                    return new b.pkg.B.NestedB();
                 }
                 b.pkg.BGeneric<b.pkg.B> test() {
                     return new b.pkg.BGeneric();

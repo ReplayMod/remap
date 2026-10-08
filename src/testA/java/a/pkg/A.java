@@ -137,7 +137,7 @@ public class A extends AParent implements AInterface {
         private int aField;
     }
 
-    public static class InnerA extends A {
+    public static class NestedA extends A {
     }
 
     public static class GenericA<T> {

@@ -24,13 +24,13 @@ class TestReferences {
     fun `remaps qualified inner class references`() {
         TestData.remapKt("""
             import a.pkg.A
-            fun test(): A.InnerA {
-                return A.InnerA()
+            fun test(): A.NestedA {
+                return A.NestedA()
             }
         """.trimIndent()) shouldBe """
             import b.pkg.B
-            fun test(): B.InnerB {
-                return B.InnerB()
+            fun test(): B.NestedB {
+                return B.NestedB()
             }
         """.trimIndent()
     }
@@ -38,14 +38,14 @@ class TestReferences {
     @Test
     fun `remaps imported inner class references`() {
         TestData.remapKt("""
-            import a.pkg.A.InnerA
-            fun test(): InnerA {
-                return InnerA()
+            import a.pkg.A.NestedA
+            fun test(): NestedA {
+                return NestedA()
             }
         """.trimIndent()) shouldBe """
-            import b.pkg.B.InnerB
-            fun test(): InnerB {
-                return InnerB()
+            import b.pkg.B.NestedB
+            fun test(): NestedB {
+                return NestedB()
             }
         """.trimIndent()
     }
@@ -56,15 +56,15 @@ class TestReferences {
             fun test(): a.pkg.A {
                 return a.pkg.A()
             }
-            fun test(): a.pkg.A.InnerA {
-                return a.pkg.A.InnerA()
+            fun test(): a.pkg.A.NestedA {
+                return a.pkg.A.NestedA()
             }
         """.trimIndent()) shouldBe """
             fun test(): b.pkg.B {
                 return b.pkg.B()
             }
-            fun test(): b.pkg.B.InnerB {
-                return b.pkg.B.InnerB()
+            fun test(): b.pkg.B.NestedB {
+                return b.pkg.B.NestedB()
             }
         """.trimIndent()
     }
@@ -74,23 +74,23 @@ class TestReferences {
         TestData.transformer.remap(mapOf(
             "test.kt" to """
                 import a.pkg.UserA
-                import a.pkg.UserA.InnerA
+                import a.pkg.UserA.NestedA
                 fun test(): UserA {
                     return UserA()
                 }
-                fun test(): InnerA {
-                    return InnerA()
+                fun test(): NestedA {
+                    return NestedA()
                 }
             """.trimIndent(),
-            "a/pkg/UserA.kt" to "package a.pkg; class UserA { class InnerA {} }",
+            "a/pkg/UserA.kt" to "package a.pkg; class UserA { class NestedA {} }",
         ))["test.kt"]?.first shouldBe """
             import b.pkg.UserB
-            import b.pkg.UserB.InnerB
+            import b.pkg.UserB.NestedB
             fun test(): UserB {
                 return UserB()
             }
-            fun test(): InnerB {
-                return InnerB()
+            fun test(): NestedB {
+                return NestedB()
             }
         """.trimIndent()
     }

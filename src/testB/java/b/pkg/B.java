@@ -128,7 +128,7 @@ public class B extends BParent implements BInterface {
         private int bField;
     }
 
-    public static class InnerB extends B {
+    public static class NestedB extends B {
     }
 
     public static class GenericB<T> {

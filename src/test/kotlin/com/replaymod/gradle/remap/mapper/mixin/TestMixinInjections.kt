@@ -280,7 +280,7 @@ class TestMixinInjections {
             class MixinA {
                 @Inject(method = "aMethod", at = @At(target = "La/pkg/A;a:La/pkg/A;"))
                 private void testPrivate() {}
-                @Inject(method = "aMethod", at = @At(target = "La/pkg/A$InnerA;aPub:La/pkg/A;"))
+                @Inject(method = "aMethod", at = @At(target = "La/pkg/A$NestedA;aPub:La/pkg/A;"))
                 private void testPublic() {}
             }
         """.trimIndent()) shouldBe $$"""
@@ -289,7 +289,7 @@ class TestMixinInjections {
             class MixinA {
                 @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B;b:Lb/pkg/B;"))
                 private void testPrivate() {}
-                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B$InnerB;bPub:Lb/pkg/B;"))
+                @Inject(method = "bMethod", at = @At(target = "Lb/pkg/B$NestedB;bPub:Lb/pkg/B;"))
                 private void testPublic() {}
             }
         """.trimIndent()
