@@ -47,5 +47,8 @@ MD: a/pkg/AParent/aSpecializableMethodWithChangingSignature ()La/pkg/AParent; b/
 CL: a/pkg/AInterface b/pkg/BInterface
 MD: a/pkg/AInterface/aInterfaceMethod ()V b/pkg/BInterface/bInterfaceMethod ()V
 CL: a/pkg/AGeneric b/pkg/BGeneric
+CL: a/pkg/AEnum b/pkg/BEnum
+FD: a/pkg/AEnum/A1 b/pkg/BEnum/B1
+FD: a/pkg/AEnum/A2 b/pkg/BEnum/B2
 CL: a/pkg/UserA b/pkg/UserB
 CL: a/pkg/UserA$NestedA b/pkg/UserB$NestedB

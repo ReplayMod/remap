@@ -120,4 +120,13 @@ class TestReferences {
             fun testStatic() = b.pkg.B.bPubStatic
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps enum entry references`() {
+        TestData.remapKt("""
+            fun test() = a.pkg.AEnum.A1
+        """.trimIndent()) shouldBe """
+            fun test() = b.pkg.BEnum.B1
+        """.trimIndent()
+    }
 }
