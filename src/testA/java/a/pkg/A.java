@@ -6,6 +6,7 @@ import java.util.function.Supplier;
 public class A extends AParent implements AInterface {
     private A a;
     public A aPub;
+    public static A aPubStatic;
     private int aField;
 
     public A() {

@@ -109,4 +109,15 @@ class TestReferences {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps field references`() {
+        TestData.remapKt("""
+            fun test() = a.pkg.A().aPub
+            fun testStatic() = a.pkg.A.aPubStatic
+        """.trimIndent()) shouldBe """
+            fun test() = b.pkg.B().bPub
+            fun testStatic() = b.pkg.B.bPubStatic
+        """.trimIndent()
+    }
 }

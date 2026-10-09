@@ -3,6 +3,7 @@ package b.pkg;
 public class B extends BParent implements BInterface {
     private B b;
     public B bPub;
+    public static B bPubStatic;
     private int bField;
 
     public B() {
