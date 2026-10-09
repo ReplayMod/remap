@@ -94,6 +94,31 @@ class TestReferences {
     }
 
     @Test
+    fun `remaps overrides`() {
+        TestData.remap("""
+            class Test extends a.pkg.A {
+                @Override public a.pkg.A getA() { return create(); }
+                @Override public void aMethod() {}
+                @Override public void aOverloaded(int arg) {}
+                
+                private a.pkg.A myAnon = new a.pkg.A() {
+                    @Override public void aMethod() {}
+                };
+            }
+        """.trimIndent()) shouldBe """
+            class Test extends b.pkg.B {
+                @Override public b.pkg.B getB() { return create(); }
+                @Override public void bMethod() {}
+                @Override public void bOverloaded(int arg) {}
+                
+                private b.pkg.B myAnon = new b.pkg.B() {
+                    @Override public void bMethod() {}
+                };
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps method override with narrowed argument type`() {
         TestData.remap("""
             class Test extends a.pkg.A.GenericA<a.pkg.A> {

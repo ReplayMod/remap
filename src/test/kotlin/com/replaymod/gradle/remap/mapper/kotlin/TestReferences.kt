@@ -129,4 +129,27 @@ class TestReferences {
             fun test() = b.pkg.BEnum.B1
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps overrides`() {
+        TestData.remapKt("""
+            class MyClass : a.pkg.A() {
+                override fun getA() = TODO()
+                override fun aMethod() {}
+                override fun aOverloaded(arg: Int) {}
+            }
+            val myAnon = object : a.pkg.A() {
+                override fun aMethod() {}
+            }
+        """.trimIndent()) shouldBe """
+            class MyClass : b.pkg.B() {
+                override fun getB() = TODO()
+                override fun bMethod() {}
+                override fun bOverloaded(arg: Int) {}
+            }
+            val myAnon = object : b.pkg.B() {
+                override fun bMethod() {}
+            }
+        """.trimIndent()
+    }
 }
