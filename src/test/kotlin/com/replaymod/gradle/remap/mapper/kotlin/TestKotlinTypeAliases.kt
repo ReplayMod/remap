@@ -11,10 +11,10 @@ class TestKotlinTypeAliases {
     fun `remaps simple alias`() {
         TestData.remapKt("""
             typealias A = a.pkg.A
-            val test: A = TODO()
+            val test: A = A()
         """.trimIndent()) shouldBe """
             typealias A = b.pkg.B
-            val test: A = TODO()
+            val test: A = A()
         """.trimIndent()
     }
 
@@ -33,10 +33,10 @@ class TestKotlinTypeAliases {
     fun `remaps inner class alias`() {
         TestData.remapKt("""
             typealias NestedA = a.pkg.A.NestedA
-            val test: NestedA = TODO()
+            val test: NestedA = NestedA()
         """.trimIndent()) shouldBe """
             typealias NestedA = b.pkg.B.NestedB
-            val test: NestedA = TODO()
+            val test: NestedA = NestedA()
         """.trimIndent()
     }
 }
