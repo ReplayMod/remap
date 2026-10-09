@@ -39,4 +39,15 @@ class TestKotlinTypeAliases {
             val test: NestedA = NestedA()
         """.trimIndent()
     }
+
+    @Test
+    fun `does not remap aliased SAM constructor`() {
+        TestData.remapKt("""
+            typealias Interface = a.pkg.AInterface
+            val test = Interface { }
+        """.trimIndent()) shouldBe """
+            typealias Interface = b.pkg.BInterface
+            val test = Interface { }
+        """.trimIndent()
+    }
 }
