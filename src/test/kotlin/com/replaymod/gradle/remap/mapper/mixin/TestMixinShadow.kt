@@ -61,4 +61,27 @@ class TestMixinShadow {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `does not rename non-shadow fields and methods`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Unique
+                private a.pkg.A a;
+                @org.spongepowered.asm.mixin.Unique
+                protected abstract a.pkg.A getA();
+                private a.pkg.A test() { this.getA(); return this.a; }
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Unique
+                private b.pkg.B a;
+                @org.spongepowered.asm.mixin.Unique
+                protected abstract b.pkg.B getA();
+                private b.pkg.B test() { this.getA(); return this.a; }
+            }
+        """.trimIndent()
+    }
 }

@@ -82,15 +82,20 @@ internal class PsiMapper(
 
     private fun findMapping(field: PsiField): FieldMapping? {
         val declaringClass = field.containingClass ?: return null
-        val name = declaringClass.dollarQualifiedName ?: return null
-        var mapping: ClassMapping<*, *>? = mixinTargets[declaringClass.qualifiedName ?: return null]
-            ?.dollarQualifiedName
-            ?.let { map.findClassMapping(it) }
-        if (mapping == null) {
-            mapping = map.findClassMapping(name)
+        var name = declaringClass.dollarQualifiedName ?: return null
+
+        val mixinTargetClass = mixinTargets[name]
+        // If this field is declared in a mixin class, we want to consider the hierarchy of the target instead
+        if (mixinTargetClass != null) {
+            // but only if the field conceptually belongs to the target class
+            if (field.getAnnotation(CLASS_SHADOW) == null) {
+                return null // otherwise, it belongs to the mixin and never gets remapped
+            }
+
+            name = mixinTargetClass.dollarQualifiedName!!
         }
-        if (mapping == null) return null
-        return mapping.findFieldMapping(field.name)
+
+        return map.findClassMapping(name)?.findFieldMapping(field.name)
     }
 
     private fun map(expr: PsiElement, method: PsiMethod) {
