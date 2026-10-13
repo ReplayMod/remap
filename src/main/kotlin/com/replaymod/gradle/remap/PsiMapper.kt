@@ -485,7 +485,7 @@ internal class PsiMapper(
             .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun mapMixinTarget(annotation: PsiAnnotation): PsiClass? {
+    private fun mapMixinTarget(annotation: PsiAnnotation): Pair<PsiClass, PsiElement>? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -494,7 +494,7 @@ internal class PsiMapper(
                 val type = value.operand
                 val reference = type.innermostComponentReferenceElement ?: continue
                 val psiClass = reference.resolve() as PsiClass? ?: continue
-                return psiClass
+                return Pair(psiClass, value)
             }
             if ("targets" == name) {
                 val value = pair.value
@@ -508,7 +508,7 @@ internal class PsiMapper(
                 if (mapped != null && mapped != specifiedName) {
                     changes.replace(value, "\"$mapped\"")
                 }
-                return psiClass
+                return Pair(psiClass, value)
             }
         }
         return null
@@ -596,16 +596,7 @@ internal class PsiMapper(
 
         val mappedName = targetMethod?.let { findExactMapping(targetClass, it.name, it.desc) }?.deobfuscatedName ?: targetName
 
-        val remappedTargetClassNode = mixinContext.remappedTargetClassAsm
-        if (remappedTargetClassNode == null) {
-            // Fallback using only mappings file, which isn't necessarily exhaustive
-            val mapping = targetClass.classId?.let { map.findClassMapping(it) }
-            val mappedMethods = mapping?.methodMappings?.filter { it.deobfuscatedName == mappedName } ?: emptyList()
-            val ambiguousName = mappedMethods.size > 1
-            val mappedDesc = if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
-            return mappedName + mappedDesc
-        }
-
+        val remappedTargetClassNode = mixinContext.remappedTargetClassAsm!!
         val mappedMethods = remappedTargetClassNode.methods.filter { it.name == mappedName }
         val matchingMethods =
             if (targetMethod == null) mappedMethods
@@ -842,15 +833,19 @@ internal class PsiMapper(
 
             override fun visitClass(psiClass: PsiClass) {
                 val mixinAnnotation = psiClass.getAnnotation(CLASS_MIXIN)
-                val mixinContext = if (mixinAnnotation != null) {
-                    val targetClass = mapMixinTarget(mixinAnnotation)
-
-                    val targetClassNode = targetClass?.getAsmTree()
-                    val targetClassId = targetClass?.classId
+                val mixinContext = mixinAnnotation?.let {
+                    mapMixinTarget(mixinAnnotation)
+                }?.let { (targetClass, targetExpr) ->
+                    val targetClassNode = targetClass.getAsmTree()
+                    val targetClassId = targetClass.classId
                     val mapping = targetClassId?.let { map.findClassMapping(it) }
                     val remappedClassId = mapping?.deobfuscatedClassId ?: targetClassId
                     val remappedTargetClass = remappedClassId?.let { findPsiClass(it, remappedProject ?: file.project) }
-                    val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
+                    var remappedTargetClassNode = remappedTargetClass?.getAsmTree()
+                    if (targetClassNode != null && remappedTargetClassNode == null) {
+                        changes.error(targetExpr, "Failed to find bytecode for $remappedClassId in remapped classpath.")
+                        remappedTargetClassNode = ClassNode()
+                    }
                     MixinContext(
                         psiClass,
                         targetClass,
@@ -858,8 +853,6 @@ internal class PsiMapper(
                         remappedTargetClass,
                         remappedTargetClassNode,
                     )
-                } else {
-                    null
                 }
 
                 if (mixinContext != null) {
