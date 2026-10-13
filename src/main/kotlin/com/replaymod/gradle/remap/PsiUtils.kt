@@ -17,81 +17,83 @@ import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementType
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
 import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
+import org.jetbrains.kotlin.name.Name
 import org.objectweb.asm.ClassReader
 import org.objectweb.asm.tree.ClassNode
 
-internal data class FullyQualifiedClassName(val pkg: String, val name: List<String>) {
-    val javaFqn: String
-        get() = pkg + ".".takeUnless { pkg.isEmpty() } + name.joinToString(".")
+internal fun possibleClassIdsForMixinString(name: String): Sequence<ClassId> {
+    // JVM-style name, e.g. a/pkg/A$Inner
+    if ('/' in name) {
+        val split = name.lastIndexOf('/')
+        return sequenceOf(ClassId(
+            FqName(name.substring(0, split).replace('/', '.')),
+            FqName(name.substring(split + 1).replace('$', '.')),
+            isLocal = false,
+        ))
+    }
 
-    companion object {
-        fun guess(str: String): Sequence<FullyQualifiedClassName> {
-            if ("/" in str) {
-                val split = str.lastIndexOf('/')
-                return sequenceOf(FullyQualifiedClassName(
-                    str.substring(0, split).replace('/', '.'),
-                    str.substring(split + 1).split('$'),
-                ))
-            }
+    // Java-style package with class file name, e.g. a.pkg.A$Inner
+    if ('$' in name) {
+        val split = name.lastIndexOf('.')
+        return sequenceOf(ClassId(
+            FqName(name.substring(0, split).replace('/', '.')),
+            FqName(name.substring(split + 1).replace('$', '.')),
+            isLocal = false,
+        ))
+    }
 
-            if ("$" in str) {
-                val split = str.lastIndexOf('.')
-                return sequenceOf(FullyQualifiedClassName(
-                    str.substring(0, split),
-                    str.substring(split + 1).split('$'),
-                ))
-            }
-
-            var split = str.length
-            return generateSequence {
-                split = str.lastIndexOf('.', split - 1)
-                if (split == -1) return@generateSequence null
-                FullyQualifiedClassName(
-                    str.substring(0, split),
-                    str.substring(split + 1).split('.'),
-                )
-            }
-        }
+    // Java-style name, e.g. a.pkg.A.Inner
+    // For these we cannot for sure know what belongs to the outer vs inner class, so we need to try all combinations
+    var split = name.length
+    return generateSequence {
+        split = name.lastIndexOf('.', split - 1)
+        if (split == -1) return@generateSequence null
+        ClassId(
+            FqName(name.substring(0, split)),
+            FqName(name.substring(split + 1)),
+            isLocal = false,
+        )
     }
 }
 
-internal fun findPsiClass(project: Project, name: String): PsiClass? {
+internal fun findPsiClass(classId: ClassId, project: Project): PsiClass? {
     JavaPsiFacade.getInstance(project).findClass(
-        name.replace('/', '.').replace('$', '.'),
+        classId.asFqNameString(),
         GlobalSearchScope.allScope(project),
     )?.let { return it }
 
     // JavaPsiFacade won't be able to find "anonymous" classes (e.g. "MyClass$1"), we'll have to find those ourselves
-    for (fqn in FullyQualifiedClassName.guess(name)) {
-        if (fqn.name.size <= 1) continue // not an inner class
+    val outermostCls = JavaPsiFacade.getInstance(project)
+        .findClass(classId.outermostClassId.asFqNameString(), GlobalSearchScope.allScope(project))
+        ?: return null
 
-        val outerName = fqn.copy(name = listOf(fqn.name.first()))
-        val outerCls = JavaPsiFacade.getInstance(project).findClass(outerName.javaFqn, GlobalSearchScope.allScope(project))
-            ?: continue
-
-        var cls = outerCls
-        for (name in fqn.name.drop(1)) {
-            cls = (cls as ClsClassImpl).stub
-                .childrenStubs
-                .firstNotNullOfOrNull { stub ->
-                    if (stub.stubType != JavaStubElementTypes.CLASS) return@firstNotNullOfOrNull null
-                    val psi = stub.psi as PsiClass
-                    if (psi.name != name) return@firstNotNullOfOrNull null
-                    psi
-                }
-                ?: return null
-        }
-        return cls
+    var cls = outermostCls
+    for (name in classId.relativeClassName.pathSegments().drop(1)) {
+        cls = (cls as ClsClassImpl).stub
+            .childrenStubs
+            .firstNotNullOfOrNull { stub ->
+                if (stub.stubType != JavaStubElementTypes.CLASS) return@firstNotNullOfOrNull null
+                val psi = stub.psi as PsiClass
+                if (psi.name != name.asString()) return@firstNotNullOfOrNull null
+                psi
+            }
+            ?: return null
     }
-
-    return null
+    return cls
 }
 
-internal val PsiClass.dollarQualifiedName: String? get() {
-    val parent = PsiTreeUtil.getParentOfType<PsiClass>(this, PsiClass::class.java) ?: return qualifiedName
-    val parentName = parent.dollarQualifiedName ?: return qualifiedName
-    val selfName = name ?: return qualifiedName
-    return "$parentName$$selfName"
+internal val ClassId.dollarQualifiedName: String
+    get() = relativeClassName.pathSegments().joinToString(
+        separator = "$",
+        prefix = if (packageFqName.isRoot) "" else packageFqName.asString() + ".",
+    )
+
+internal val PsiClass.classId: ClassId? get() {
+    val parent = PsiTreeUtil.getParentOfType(this, PsiClass::class.java)
+        ?: return qualifiedName?.let { ClassId.topLevel(FqName(it)) }
+    return parent.classId?.createNestedClassId(Name.identifier(name ?: return null))
 }
 
 internal val PsiNameValuePair.resolvedLiteralValue: Pair<PsiLiteralExpression, String>?
@@ -175,8 +177,8 @@ internal object PsiUtils {
         }
         is PsiClassType -> {
             val resolved = erasedType.resolve() ?: return null
-            val qualifiedName = resolved.dollarQualifiedName ?: return null
-            ObjectType(qualifiedName)
+            val classId = resolved.classId ?: return null
+            ObjectType(classId.dollarQualifiedName)
         }
         else -> throw IllegalArgumentException("Cannot translate type " + erasedType!!)
     }}

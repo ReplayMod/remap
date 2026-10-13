@@ -21,6 +21,8 @@ import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.propertyNameByGetMethodName
 import org.jetbrains.kotlin.load.java.propertyNameBySetMethodName
+import org.jetbrains.kotlin.name.ClassId
+import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -59,9 +61,6 @@ internal class PsiMapper(
         }
     }
 
-    private fun findPsiClass(name: String, project: Project = file.project) =
-        findPsiClass(project, name)
-
     context(_: MixinContext)
     private fun mapField(expr: PsiElement, field: PsiField) {
         val fieldName = field.name
@@ -82,9 +81,9 @@ internal class PsiMapper(
     context(mixinContext: MixinContext)
     private fun findMapping(field: PsiField): FieldMapping? {
         val declaringClass = field.containingClass ?: return null
-        var name = declaringClass.dollarQualifiedName ?: return null
+        var classId = declaringClass.classId ?: return null
 
-        val mixinTargetClass = if (mixinContext.isMixinClass(name)) mixinContext.targetClass else null
+        val mixinTargetClass = if (mixinContext.isMixinClass(classId)) mixinContext.targetClass else null
         // If this field is declared in a mixin class, we want to consider the hierarchy of the target instead
         if (mixinTargetClass != null) {
             // but only if the field conceptually belongs to the target class
@@ -92,10 +91,10 @@ internal class PsiMapper(
                 return null // otherwise, it belongs to the mixin and never gets remapped
             }
 
-            name = mixinTargetClass.dollarQualifiedName!!
+            classId = mixinTargetClass.classId!!
         }
 
-        return map.findClassMapping(name)?.findFieldMapping(field.name)
+        return map.findClassMapping(classId)?.findFieldMapping(field.name)
     }
 
     context(_: MixinContext)
@@ -301,8 +300,8 @@ internal class PsiMapper(
         val parentQueue = ArrayDeque<PsiClass>()
         parentQueue.offer(declaringClass)
 
-        var name = declaringClass!!.qualifiedName
-        val mixinTargetClass = if (name != null && mixinContext.isMixinClass(name)) mixinContext.targetClass else null
+        val classId = declaringClass!!.classId
+        val mixinTargetClass = if (classId != null && mixinContext.isMixinClass(classId)) mixinContext.targetClass else null
         // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
         if (mixinTargetClass != null) {
             parentQueue.offer(mixinTargetClass)
@@ -350,9 +349,7 @@ internal class PsiMapper(
                     parentQueue.offer(anInterface)
                 }
 
-                name = declaringClass.dollarQualifiedName
-                if (name == null) continue
-                mapping = map.findClassMapping(name)
+                mapping = map.findClassMapping(declaringClass.classId ?: continue)
             }
         }
     }
@@ -366,7 +363,7 @@ internal class PsiMapper(
         while (true) {
             val currentClass = parentQueue.poll() ?: return null
 
-            val mapping = currentClass.dollarQualifiedName?.let { map.findClassMapping(it) }
+            val mapping = currentClass.classId?.let { map.findClassMapping(it) }
             if (mapping != null) {
                 val mapped = mapping.findMethodMapping(signature)
                 if (mapped != null) {
@@ -385,23 +382,24 @@ internal class PsiMapper(
     }
 
     private fun mapKtClassOrObject(expr: PsiElement, resolved: KtClassOrObject) {
-        val fqName = resolved.fqName ?: return
         val classes = generateSequence(resolved) { it.getParentOfType<KtClassOrObject>(true) }.toMutableList()
         classes.reverse()
-        val dollarName = resolved.containingKtFile.packageFqName.child(classes.removeFirst().nameAsName!!).asString() +
-            classes.joinToString("") { '$' + it.name!! }
-        mapClassLike(expr, fqName.asString(), dollarName)
+        val classId = ClassId(
+            FqName(resolved.containingKtFile.packageFqName.asString()),
+            FqName(classes.joinToString("$") { it.name!! }),
+            false,
+        )
+        mapClassLike(expr, classId)
     }
 
-    private fun mapClassLike(expr: PsiElement, name: String, dollarName: String) {
-        val mapping = map.findClassMapping(dollarName) ?: return
-        var mapped = mapping.fullDeobfuscatedName
-        if (mapped == dollarName) return
-        mapped = mapped.replace('/', '.').replace('$', '.')
+    private fun mapClassLike(expr: PsiElement, classId: ClassId) {
+        val mapping = map.findClassMapping(classId) ?: return
+        val mapped = mapping.deobfuscatedClassId
+        if (mapped == classId) return
 
         // Fully qualified, obvious case
-        if (expr.text == name) {
-            changes.replace(expr, mapped)
+        if (expr.text == classId.asFqNameString()) {
+            changes.replace(expr, mapped.asFqNameString())
             return
         }
 
@@ -428,13 +426,13 @@ internal class PsiMapper(
         }
 
         // Fully qualified, tricky cases
-        val simpleName = name.substringAfterLast(".")
-        val qualifierName = name.substringBeforeLast(".")
+        val simpleName = classId.shortClassName.asString()
+        val qualifierName = classId.asFqNameString().substringBeforeLast(".")
         if (qualifiedExpr?.text == simpleName && qualifierExpr?.text == qualifierName) {
             if (changes.isUnchanged(qualifierExpr)) {
-                changes.replace(qualifierExpr, mapped.substringBeforeLast("."))
+                changes.replace(qualifierExpr, mapped.asFqNameString().substringBeforeLast("."))
             }
-            changes.replace(qualifiedExpr, mapped.substringAfterLast("."))
+            changes.replace(qualifiedExpr, mapped.shortClassName.asString())
             return
         }
 
@@ -446,7 +444,7 @@ internal class PsiMapper(
         // if (expr.text != name.substring(name.lastIndexOf('.') + 1)) {
         //     return // type alias, will be remapped at its definition
         // }
-        replaceIdentifier(expr, mapped.substring(mapped.lastIndexOf('.') + 1))
+        replaceIdentifier(expr, mapped.shortClassName.asString())
     }
 
     context(_: MixinContext)
@@ -455,7 +453,7 @@ internal class PsiMapper(
             is PsiField -> mapField(expr, resolved)
             is PsiMethod -> mapMethod(expr, resolved)
             is KtNamedFunction -> mapMethod(expr, resolved.getRepresentativeLightMethod() ?: return)
-            is PsiClass -> mapClassLike(expr, resolved.qualifiedName ?: return, resolved.dollarQualifiedName ?: return)
+            is PsiClass -> mapClassLike(expr, resolved.classId ?: return)
             is KtClassOrObject -> mapKtClassOrObject(expr, resolved)
         }
     }
@@ -471,7 +469,7 @@ internal class PsiMapper(
     }
 
     private fun isSyntheticPropertyShadowedByField(propertyName: String, mapping: MethodMapping, expr: PsiElement): Boolean {
-        val cls = findPsiClass(mapping.parent.fullDeobfuscatedName, remappedProject ?: file.project) ?: return false
+        val cls = findPsiClass(mapping.parent.deobfuscatedClassId, remappedProject ?: file.project) ?: return false
         val field = cls.findFieldByName(propertyName, true) ?: return false
 
         val canAccessProtected = expr.getNonStrictParentOfType<KtClassOrObject>()?.extends(
@@ -502,9 +500,10 @@ internal class PsiMapper(
                 val value = pair.value
                 if (value !is PsiLiteral) continue
                 val specifiedName = value.value as? String ?: continue
-                val psiClass = findPsiClass(specifiedName) ?: continue
-                val qualifiedName = psiClass.dollarQualifiedName ?: continue
-                val mapping = map.findClassMapping(qualifiedName)
+                val psiClass = possibleClassIdsForMixinString(specifiedName)
+                    .firstNotNullOfOrNull { findPsiClass(it, file.project) }
+                    ?: continue
+                val mapping = map.findClassMapping(psiClass.classId ?: continue)
                 val mapped = mapping?.fullDeobfuscatedName?.replace('/', '.')
                 if (mapped != null && mapped != specifiedName) {
                     changes.replace(value, "\"$mapped\"")
@@ -540,7 +539,7 @@ internal class PsiMapper(
                     val targetClass = mixinContext.targetClass ?: return
                     findExactMapping(targetClass, target, ClassUtil.getAsmMethodSignature(method))?.deobfuscatedName
                 } else {
-                    val mapping = mixinContext.targetClass?.dollarQualifiedName?.let { map.findClassMapping(it) }
+                    val mapping = mixinContext.targetClass?.classId?.let { map.findClassMapping(it) }
                     mapping?.findFieldMapping(target)?.deobfuscatedName
                 }
                 if (mapped != null && mapped != target) {
@@ -619,7 +618,7 @@ internal class PsiMapper(
                             }
                         } else {
                             // Fallback using only mappings file, which isn't necessarily exhaustive
-                            val mapping = targetClass.dollarQualifiedName?.let { map.findClassMapping(it) }
+                            val mapping = targetClass.classId?.let { map.findClassMapping(it) }
                             val mappedMethods = mapping?.methodMappings?.filter { it.deobfuscatedName == mappedName } ?: emptyList()
                             val ambiguousName = mappedMethods.size > 1
                             if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
@@ -650,7 +649,7 @@ internal class PsiMapper(
                         targetMethods.firstOrNull()
                     }
                     val mappedName = targetMethod?.let { findMapping(it) }?.deobfuscatedName ?: targetName
-                    val mapping = targetClass.dollarQualifiedName?.let { map.findClassMapping(it) }
+                    val mapping = targetClass.classId?.let { map.findClassMapping(it) }
                     val ambiguousName = (mapping?.methodMappings?.count { it.deobfuscatedName == mappedName } ?: 0) > 1
                     val mapped = mappedName + when {
                         ambiguousName && targetMethod != null ->
@@ -672,7 +671,7 @@ internal class PsiMapper(
 
     private fun remapInternalType(internalType: String, result: StringBuilder): ClassMapping<*, *>? {
         if (internalType[0] == 'L') {
-            val type = internalType.substring(1, internalType.length - 1).replace('/', '.')
+            val type = ClassId.fromString(internalType.substring(1, internalType.length - 1).replace('$', '.'))
             val mapping = map.findClassMapping(type)
             if (mapping != null) {
                 result.append('L').append(mapping.fullDeobfuscatedName).append(';')
@@ -707,7 +706,7 @@ internal class PsiMapper(
         val name = signature.substring(ownerEnd + 1, argsBegin)
         val returnType = signature.substring(argsEnd + 1)
 
-        val ownerPsi = findPsiClass(owner.drop(1).dropLast(1))
+        val ownerPsi = findPsiClass(ClassId.fromString(owner.drop(1).dropLast(1).replace('$', '.')), file.project)
         val methodPsi = if (method) {
             val desc = signature.substring(argsBegin)
             ownerPsi?.findMethodsByName(name, true)?.find { ClassUtil.getAsmMethodSignature(it) == desc }
@@ -733,7 +732,7 @@ internal class PsiMapper(
             mapped = findMapping(methodPsi)?.deobfuscatedName
         }
         if (fieldPsi != null) {
-            val mapping = fieldPsi.containingClass?.dollarQualifiedName?.let { map.findClassMapping(it) }
+            val mapping = fieldPsi.containingClass?.classId?.let { map.findClassMapping(it) }
             if (mapping != null) {
                 mapped = mapping.findFieldMapping(name)?.deobfuscatedName
             }
@@ -846,10 +845,10 @@ internal class PsiMapper(
                     val targetClass = getMixinTarget(mixinAnnotation)
 
                     val targetClassNode = targetClass?.getAsmTree()
-                    val targetClassQualifiedName = targetClass?.dollarQualifiedName
-                    val mapping = targetClassQualifiedName?.let { map.findClassMapping(it) }
-                    val remappedName = mapping?.fullDeobfuscatedName ?: targetClassQualifiedName
-                    val remappedTargetClass = remappedName?.let { findPsiClass(it, remappedProject ?: file.project) }
+                    val targetClassId = targetClass?.classId
+                    val mapping = targetClassId?.let { map.findClassMapping(it) }
+                    val remappedClassId = mapping?.deobfuscatedClassId ?: targetClassId
+                    val remappedTargetClass = remappedClassId?.let { findPsiClass(it, remappedProject ?: file.project) }
                     val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
                     MixinContext(
                         psiClass,
@@ -1045,9 +1044,9 @@ private class MixinContext(
     val remappedTargetClass: PsiClass?,
     val remappedTargetClassAsm: ClassNode?,
 ) {
-    private val mixinClassDollarQualifiedName = mixinClass?.dollarQualifiedName
+    private val mixinClassId = mixinClass?.classId
 
-    fun isMixinClass(dollarQualifiedName: String) = mixinClassDollarQualifiedName == dollarQualifiedName
+    fun isMixinClass(classId: ClassId) = mixinClassId == classId
 
     companion object {
         val EMPTY = MixinContext(null, null, null, null, null)
