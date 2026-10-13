@@ -494,13 +494,14 @@ internal class PsiMapper(
             if ("targets" == name) {
                 val value = pair.value
                 if (value !is PsiLiteral) continue
-                val qualifiedName = value.value as? String ?: continue
-                val mapping = map.findPotentialInnerClassMapping(qualifiedName)
+                val specifiedName = value.value as? String ?: continue
+                val psiClass = findPsiClass(specifiedName) ?: continue
+                val qualifiedName = psiClass.dollarQualifiedName ?: continue
+                val mapping = map.findClassMapping(qualifiedName)
                 val mapped = mapping?.fullDeobfuscatedName?.replace('/', '.')
-                if (mapped != null && mapped != qualifiedName) {
+                if (mapped != null && mapped != specifiedName) {
                     changes.replace(value, "\"$mapped\"")
                 }
-                val psiClass = findPsiClass(qualifiedName) ?: continue
                 return Triple(psiClass, qualifiedName, mapping)
             }
         }
