@@ -47,7 +47,6 @@ internal class PsiMapper(
 ) {
     private var mixinTarget: PsiClass? = null
     private val mixinTargets = mutableMapOf<String, PsiClass>()
-    private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val aliased = mutableSetOf<String>()
 
     private fun replaceIdentifier(parent: PsiElement, with: String) {
@@ -84,7 +83,9 @@ internal class PsiMapper(
     private fun findMapping(field: PsiField): FieldMapping? {
         val declaringClass = field.containingClass ?: return null
         val name = declaringClass.dollarQualifiedName ?: return null
-        var mapping: ClassMapping<*, *>? = this.mixinMappings[declaringClass.qualifiedName ?: return null]
+        var mapping: ClassMapping<*, *>? = mixinTargets[declaringClass.qualifiedName ?: return null]
+            ?.dollarQualifiedName
+            ?.let { map.findClassMapping(it) }
         if (mapping == null) {
             mapping = map.findClassMapping(name)
         }
@@ -833,7 +834,6 @@ internal class PsiMapper(
                         val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
 
                         mixinTargets[psiClass.qualifiedName!!] = targetClass
-                        if (mapping != null) mixinMappings[psiClass.qualifiedName!!] = mapping
 
                         remapAccessors(targetClass, mapping)
                         remapMixinInjections(targetClass, targetClassNode, remappedTargetClassNode, mapping)
