@@ -485,7 +485,7 @@ internal class PsiMapper(
             .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun getMixinTarget(annotation: PsiAnnotation): PsiClass? {
+    private fun mapMixinTarget(annotation: PsiAnnotation): PsiClass? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -842,7 +842,7 @@ internal class PsiMapper(
             override fun visitClass(psiClass: PsiClass) {
                 val mixinAnnotation = psiClass.getAnnotation(CLASS_MIXIN)
                 val mixinContext = if (mixinAnnotation != null) {
-                    val targetClass = getMixinTarget(mixinAnnotation)
+                    val targetClass = mapMixinTarget(mixinAnnotation)
 
                     val targetClassNode = targetClass?.getAsmTree()
                     val targetClassId = targetClass?.classId
