@@ -479,7 +479,7 @@ internal class PsiMapper(
             .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun getMixinTarget(annotation: PsiAnnotation): Triple<PsiClass, String, ClassMapping<*, *>?>? {
+    private fun getMixinTarget(annotation: PsiAnnotation): PsiClass? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -488,9 +488,7 @@ internal class PsiMapper(
                 val type = value.operand
                 val reference = type.innermostComponentReferenceElement ?: continue
                 val psiClass = reference.resolve() as PsiClass? ?: continue
-                val qualifiedName = psiClass.dollarQualifiedName ?: continue
-                val mapping = map.findClassMapping(qualifiedName)
-                return Triple(psiClass, qualifiedName, mapping)
+                return psiClass
             }
             if ("targets" == name) {
                 val value = pair.value
@@ -503,7 +501,7 @@ internal class PsiMapper(
                 if (mapped != null && mapped != specifiedName) {
                     changes.replace(value, "\"$mapped\"")
                 }
-                return Triple(psiClass, qualifiedName, mapping)
+                return psiClass
             }
         }
         return null
@@ -823,14 +821,17 @@ internal class PsiMapper(
             override fun visitClass(psiClass: PsiClass) {
                 val mixinAnnotation = psiClass.getAnnotation(CLASS_MIXIN)
                 if (mixinAnnotation != null) {
-                    val (targetClass, targetClassQualifiedName, mapping) = getMixinTarget(mixinAnnotation) ?: Triple(null, null, null)
+                    val targetClass = getMixinTarget(mixinAnnotation)
                     mixinTarget = targetClass
 
                     remapAtTargets()
 
-                    if (targetClass != null && targetClassQualifiedName != null) {
+                    if (targetClass != null) {
                         val targetClassNode = targetClass.getAsmTree()
-                        val remappedTargetClass = findPsiClass(mapping?.fullDeobfuscatedName ?: targetClassQualifiedName, remappedProject ?: file.project)
+                        val targetClassQualifiedName = targetClass.dollarQualifiedName
+                        val mapping = targetClassQualifiedName?.let { map.findClassMapping(it) }
+                        val remappedName = mapping?.fullDeobfuscatedName ?: targetClassQualifiedName
+                        val remappedTargetClass = remappedName?.let { findPsiClass(it, remappedProject ?: file.project) }
                         val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
 
                         mixinTargets[psiClass.qualifiedName!!] = targetClass
