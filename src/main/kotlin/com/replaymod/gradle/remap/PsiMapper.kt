@@ -820,28 +820,29 @@ internal class PsiMapper(
     private fun remapJavaFile() {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitClass(psiClass: PsiClass) {
-                val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
+                val mixinAnnotation = psiClass.getAnnotation(CLASS_MIXIN)
+                if (mixinAnnotation != null) {
+                    val (targetClass, targetClassQualifiedName, mapping) = getMixinTarget(mixinAnnotation) ?: Triple(null, null, null)
+                    mixinTarget = targetClass
 
-                val (targetClass, targetClassQualifiedName, mapping) = getMixinTarget(annotation) ?: Triple(null, null, null)
-                mixinTarget = targetClass
+                    remapAtTargets()
 
-                remapAtTargets()
+                    if (targetClass != null && targetClassQualifiedName != null) {
+                        val targetClassNode = targetClass.getAsmTree()
+                        val remappedTargetClass = findPsiClass(mapping?.fullDeobfuscatedName ?: targetClassQualifiedName, remappedProject ?: file.project)
+                        val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
 
-                targetClass ?: return
-                targetClassQualifiedName ?: return
-                val targetClassNode = targetClass.getAsmTree()
-                val remappedTargetClass = findPsiClass(mapping?.fullDeobfuscatedName ?: targetClassQualifiedName, remappedProject ?: file.project)
-                val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
+                        mixinTargets[psiClass.qualifiedName!!] = targetClass
+                        if (mapping != null) mixinMappings[psiClass.qualifiedName!!] = mapping
 
-                mixinTargets[psiClass.qualifiedName!!] = targetClass
-                if (mapping != null) mixinMappings[psiClass.qualifiedName!!] = mapping
+                        remapAccessors(targetClass, mapping)
+                        remapMixinInjections(targetClass, targetClassNode, remappedTargetClassNode, mapping)
+                    }
+                }
 
-                remapAccessors(targetClass, mapping)
-                remapMixinInjections(targetClass, targetClassNode, remappedTargetClassNode, mapping)
+                super.visitClass(psiClass)
             }
-        })
 
-        file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitField(field: PsiField) {
                 if (changes.isUnchanged(field)) {
                     map(field, field)
