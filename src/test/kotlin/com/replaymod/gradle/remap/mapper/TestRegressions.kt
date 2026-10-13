@@ -24,4 +24,21 @@ class TestRegressions {
             """.trimIndent()
         )).expectNoErrors()
     }
+
+    @Test
+    fun `must remap injections even if target doesn't have mappings`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(pkg.UnmappedChild.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "getA")
+                private void test() {}
+            }
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(pkg.UnmappedChild.class)
+            class MixinA {
+                @org.spongepowered.asm.mixin.injection.Inject(method = "getB")
+                private void test() {}
+            }
+        """.trimIndent()
+    }
 }

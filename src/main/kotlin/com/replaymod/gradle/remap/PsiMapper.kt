@@ -478,7 +478,7 @@ internal class PsiMapper(
             .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
-    private fun getMixinTarget(annotation: PsiAnnotation): Pair<PsiClass, ClassMapping<*, *>>? {
+    private fun getMixinTarget(annotation: PsiAnnotation): Triple<PsiClass, String, ClassMapping<*, *>?>? {
         for (pair in annotation.parameterList.attributes) {
             val name = pair.name
             if (name == null || "value" == name) {
@@ -488,26 +488,26 @@ internal class PsiMapper(
                 val reference = type.innermostComponentReferenceElement ?: continue
                 val psiClass = reference.resolve() as PsiClass? ?: continue
                 val qualifiedName = psiClass.dollarQualifiedName ?: continue
-                val mapping = map.findClassMapping(qualifiedName) ?: continue
-                return Pair(psiClass, mapping)
+                val mapping = map.findClassMapping(qualifiedName)
+                return Triple(psiClass, qualifiedName, mapping)
             }
             if ("targets" == name) {
                 val value = pair.value
                 if (value !is PsiLiteral) continue
                 val qualifiedName = value.value as? String ?: continue
-                val mapping = map.findPotentialInnerClassMapping(qualifiedName) ?: continue
-                val mapped = mapping.fullDeobfuscatedName?.replace('/', '.')
-                if (mapped != qualifiedName) {
+                val mapping = map.findPotentialInnerClassMapping(qualifiedName)
+                val mapped = mapping?.fullDeobfuscatedName?.replace('/', '.')
+                if (mapped != null && mapped != qualifiedName) {
                     changes.replace(value, "\"$mapped\"")
                 }
                 val psiClass = findPsiClass(qualifiedName) ?: continue
-                return Pair(psiClass, mapping)
+                return Triple(psiClass, qualifiedName, mapping)
             }
         }
         return null
     }
 
-    private fun remapAccessors(targetClass: PsiClass, mapping: ClassMapping<*, *>) {
+    private fun remapAccessors(targetClass: PsiClass, mapping: ClassMapping<*, *>?) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
                 val accessorAnnotation = method.getAnnotation(CLASS_ACCESSOR)
@@ -530,7 +530,7 @@ internal class PsiMapper(
                 val mapped = if (invokerAnnotation != null) {
                     findExactMapping(targetClass, target, ClassUtil.getAsmMethodSignature(method))?.deobfuscatedName
                 } else {
-                    mapping.findFieldMapping(target)?.deobfuscatedName
+                    mapping?.findFieldMapping(target)?.deobfuscatedName
                 }
                 if (mapped != null && mapped != target) {
                     // Update accessor target
@@ -550,7 +550,7 @@ internal class PsiMapper(
         targetClass: PsiClass,
         targetClassNode: ClassNode?,
         remappedTargetClassNode: ClassNode?,
-        mapping: ClassMapping<*, *>,
+        mapping: ClassMapping<*, *>?,
     ) {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitMethod(method: PsiMethod) {
@@ -609,7 +609,7 @@ internal class PsiMapper(
                             }
                         } else {
                             // Fallback using only mappings file, which isn't necessarily exhaustive
-                            val mappedMethods = mapping.methodMappings.filter { it.deobfuscatedName == mappedName }
+                            val mappedMethods = mapping?.methodMappings?.filter { it.deobfuscatedName == mappedName } ?: emptyList()
                             val ambiguousName = mappedMethods.size > 1
                             if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
                         }
@@ -640,7 +640,7 @@ internal class PsiMapper(
                     }
                     val mappedName = targetMethod?.let(::findMapping)?.deobfuscatedName ?: targetName
 
-                    val ambiguousName = mapping.methodMappings.count { it.deobfuscatedName == mappedName } > 1
+                    val ambiguousName = (mapping?.methodMappings?.count { it.deobfuscatedName == mappedName } ?: 0) > 1
                     val mapped = mappedName + when {
                         ambiguousName && targetMethod != null ->
                             remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
@@ -821,19 +821,19 @@ internal class PsiMapper(
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
 
-                val (targetClass, mapping) = getMixinTarget(annotation) ?: Pair(null, null)
+                val (targetClass, targetClassQualifiedName, mapping) = getMixinTarget(annotation) ?: Triple(null, null, null)
                 mixinTarget = targetClass
 
                 remapAtTargets()
 
                 targetClass ?: return
-                mapping ?: return
+                targetClassQualifiedName ?: return
                 val targetClassNode = targetClass.getAsmTree()
-                val remappedTargetClass = findPsiClass(mapping.fullDeobfuscatedName, remappedProject ?: file.project)
+                val remappedTargetClass = findPsiClass(mapping?.fullDeobfuscatedName ?: targetClassQualifiedName, remappedProject ?: file.project)
                 val remappedTargetClassNode = remappedTargetClass?.getAsmTree()
 
                 mixinTargets[psiClass.qualifiedName!!] = targetClass
-                mixinMappings[psiClass.qualifiedName!!] = mapping
+                if (mapping != null) mixinMappings[psiClass.qualifiedName!!] = mapping
 
                 remapAccessors(targetClass, mapping)
                 remapMixinInjections(targetClass, targetClassNode, remappedTargetClassNode, mapping)
