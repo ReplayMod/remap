@@ -552,109 +552,127 @@ internal class PsiMapper(
         }
     }
 
-    context(mixinContext: MixinContext)
+    context(_: MixinContext)
     private fun mapMixinMethodTarget(method: PsiMethod) {
-        val targetClass = mixinContext.targetClass ?: return
         val methodAttrib = method.annotations.firstNotNullOfOrNull { it.findDeclaredAttributeValue("method") }
         for ((literalExpr, literalValue) in methodAttrib?.resolvedLiteralValues ?: emptyList()) {
-            val (targetName, targetDesc) = if ('(' in literalValue) {
-                MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
-            } else {
-                literalValue to null
+            mapMixinMethodTarget(literalExpr, literalValue)
+        }
+    }
+
+    context(mixinContext: MixinContext)
+    private fun mapMixinMethodTarget(literalExpr: PsiLiteralExpression, literalValue: String) {
+        val (targetName, targetDesc) = if ('(' in literalValue) {
+            MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
+        } else {
+            literalValue to null
+        }
+        val mapped = mapMixinMethodTarget(targetName, targetDesc, literalExpr)
+        if (mapped != null && mapped != literalValue && changes.isUnchanged(literalExpr)) {
+            changes.replace(literalExpr, '"'.toString() + mapped + '"'.toString())
+        }
+    }
+
+    context(mixinContext: MixinContext)
+    private fun mapMixinMethodTarget(
+        targetClassNode: ClassNode,
+        targetName: String,
+        targetDesc: String?,
+        expr: PsiLiteralExpression,
+    ): String? {
+        val targetClass = mixinContext.targetClass ?: return null
+        val targetMethods = targetClassNode.methods.filter { it.name == targetName }
+
+        val targetMethod = if (targetDesc != null) {
+            targetMethods.find { it.desc == targetDesc }
+        } else {
+            if (targetMethods.size > 1) {
+                changes.error(expr,
+                    "Ambiguous mixin method \"$targetName\" may refer to any of: " +
+                            targetMethods.joinToString { "\"${it.name}${it.desc}\"" })
             }
+            targetMethods.firstOrNull()
+        }
 
-            val targetClassNode = mixinContext.targetClassAsm
-            if (targetClassNode != null) {
-                val targetMethods = targetClassNode.methods.filter { it.name == targetName }
+        val mappedName = targetMethod?.let { findExactMapping(targetClass, it.name, it.desc) }?.deobfuscatedName ?: targetName
 
-                val targetMethod = if (targetDesc != null) {
-                    targetMethods.find { it.desc == targetDesc }
-                } else {
-                    if (targetMethods.size > 1) {
-                        changes.error(literalExpr,
-                            "Ambiguous mixin method \"$targetName\" may refer to any of: " +
-                                    targetMethods.joinToString { "\"${it.name}${it.desc}\"" })
-                    }
-                    targetMethods.firstOrNull()
-                }
-
-                val mappedName = targetMethod?.let { findExactMapping(targetClass, it.name, it.desc) }?.deobfuscatedName ?: targetName
-
-                val remappedTargetClassNode = mixinContext.remappedTargetClassAsm
-                val mappedDesc = if (remappedTargetClassNode != null) {
-                    val mappedMethods = remappedTargetClassNode.methods.filter { it.name == mappedName }
-                    val matchingMethods =
-                        if (targetMethod == null) mappedMethods
-                        else mappedMethods.filter { it.access and Opcodes.ACC_SYNTHETIC == targetMethod.access and Opcodes.ACC_SYNTHETIC }
-                    if (mappedMethods.isEmpty()) {
-                        // If we can't find the mapped target method, it might be added by a third-party patch
-                        // at runtime (or the mapping is missing).
-                        // To be safe, we'll use the full  descriptor if we have one, so we don't inject
-                        // into the wrong thing.
-                        (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) } ?: ""
-                    } else if (mappedMethods.size == 1) {
-                        // If there's exactly one such method, the descriptor can be omitted.
-                        ""
-                    } else if (matchingMethods.size == 1) {
-                        // If we have multiple such methods, but only one is a good match,
-                        // we need to include its descriptor.
-                        matchingMethods.single().desc
-                    } else {
-                        // If there's multiple such methods, we need to include the descriptor.
-                        val mappedDesc = (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) }
-                        if (mappedMethods.none { it.desc == mappedDesc }) {
-                            changes.error(literalExpr,
-                                "Mixin target \"$targetName\" cannot be automatically remapped " +
-                                        "as there are multiple methods with the same remapped name: " +
-                                        mappedMethods.joinToString { "\"${it.name}${it.desc}\"" })
-                        }
-                        mappedDesc ?: ""
-                    }
-                } else {
-                    // Fallback using only mappings file, which isn't necessarily exhaustive
-                    val mapping = targetClass.classId?.let { map.findClassMapping(it) }
-                    val mappedMethods = mapping?.methodMappings?.filter { it.deobfuscatedName == mappedName } ?: emptyList()
-                    val ambiguousName = mappedMethods.size > 1
-                    if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
-                }
-                val mapped = mappedName + mappedDesc
-
-                if (mapped != literalValue && changes.isUnchanged(literalExpr)) {
-                    changes.replace(literalExpr, '"'.toString() + mapped + '"'.toString())
-                }
-
-                continue
-            }
-
-            // Fallback using only PSI.
-            // This won't work for synthetic methods as those aren't visible at the PSI level.
-
-            val targetMethods = targetClass.findMethodsByName(targetName, false)
-            val targetMethod = if (targetDesc != null) {
-                targetMethods.find {
-                    ClassUtil.getAsmMethodSignature(it) == targetDesc
-                }
-            } else {
-                if (targetMethods.size > 1) {
-                    changes.error(literalExpr, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString {
-                        "\"${it.name}${ClassUtil.getAsmMethodSignature(it)}\"" 
-                    }}")
-                }
-                targetMethods.firstOrNull()
-            }
-            val mappedName = targetMethod?.let { findMapping(it) }?.deobfuscatedName ?: targetName
+        val remappedTargetClassNode = mixinContext.remappedTargetClassAsm
+        if (remappedTargetClassNode == null) {
+            // Fallback using only mappings file, which isn't necessarily exhaustive
             val mapping = targetClass.classId?.let { map.findClassMapping(it) }
-            val ambiguousName = (mapping?.methodMappings?.count { it.deobfuscatedName == mappedName } ?: 0) > 1
-            val mapped = mappedName + when {
-                ambiguousName && targetMethod != null ->
-                    remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
-                targetDesc != null -> remapMethodDesc(targetDesc)
-                else -> ""
-            }
+            val mappedMethods = mapping?.methodMappings?.filter { it.deobfuscatedName == mappedName } ?: emptyList()
+            val ambiguousName = mappedMethods.size > 1
+            val mappedDesc = if (ambiguousName) mappedMethods.first().deobfuscatedDescriptor else ""
+            return mappedName + mappedDesc
+        }
 
-            if (mapped != literalValue && changes.isUnchanged(literalExpr)) {
-                changes.replace(literalExpr, '"'.toString() + mapped + '"'.toString())
+        val mappedMethods = remappedTargetClassNode.methods.filter { it.name == mappedName }
+        val matchingMethods =
+            if (targetMethod == null) mappedMethods
+            else mappedMethods.filter { it.access and Opcodes.ACC_SYNTHETIC == targetMethod.access and Opcodes.ACC_SYNTHETIC }
+
+        return mappedName + when {
+            // If we can't find the mapped target method, it might be added by a third-party patch
+            // at runtime (or the mapping is missing).
+            // To be safe, we'll use the full  descriptor if we have one, so we don't inject
+            // into the wrong thing.
+            mappedMethods.isEmpty() -> (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) } ?: ""
+            // If there's exactly one such method, the descriptor can be omitted.
+            mappedMethods.size == 1 -> ""
+            // If we have multiple such methods, but only one is a good match,
+            // we need to include its descriptor.
+            matchingMethods.size == 1 -> matchingMethods.single().desc
+            // If there's multiple such methods, we need to include the descriptor.
+            else -> {
+                val mappedDesc = (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) }
+                if (mappedMethods.none { it.desc == mappedDesc }) {
+                    changes.error(
+                        expr,
+                        "Mixin target \"$targetName\" cannot be automatically remapped " +
+                                "as there are multiple methods with the same remapped name: " +
+                                mappedMethods.joinToString { "\"${it.name}${it.desc}\"" })
+                }
+                mappedDesc ?: ""
             }
+        }
+    }
+
+    context(mixinContext: MixinContext)
+    private fun mapMixinMethodTarget(
+        targetName: String,
+        targetDesc: String?,
+        expr: PsiLiteralExpression,
+    ): String? {
+        // Prefer using the ASM-based method.
+        // The fallback below won't work for synthetic methods as those aren't visible at the PSI level.
+        val targetClassNode = mixinContext.targetClassAsm
+        if (targetClassNode != null) {
+            return mapMixinMethodTarget(targetClassNode, targetName, targetDesc, expr)
+        }
+
+        val targetClass = mixinContext.targetClass ?: return null
+        val targetMethods = targetClass.findMethodsByName(targetName, false)
+        val targetMethod = if (targetDesc != null) {
+            targetMethods.find {
+                ClassUtil.getAsmMethodSignature(it) == targetDesc
+            }
+        } else {
+            if (targetMethods.size > 1) {
+                changes.error(expr, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString {
+                    "\"${it.name}${ClassUtil.getAsmMethodSignature(it)}\""
+                }}")
+            }
+            targetMethods.firstOrNull()
+        }
+        val mappedName = targetMethod?.let { findMapping(it) }?.deobfuscatedName ?: targetName
+
+        val mapping = targetClass.classId?.let { map.findClassMapping(it) }
+        val ambiguousName = (mapping?.methodMappings?.count { it.deobfuscatedName == mappedName } ?: 0) > 1
+        return mappedName + when {
+            ambiguousName && targetMethod != null ->
+                remapMethodDesc(ClassUtil.getAsmMethodSignature(targetMethod))
+            targetDesc != null -> remapMethodDesc(targetDesc)
+            else -> ""
         }
     }
 
