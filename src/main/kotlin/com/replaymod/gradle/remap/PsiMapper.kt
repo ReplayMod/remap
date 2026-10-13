@@ -810,14 +810,13 @@ internal class PsiMapper(
 
     fun remapFile() {
         if (file is KtFile) {
-            for (importDirective in file.importDirectives) {
-                val alias = importDirective.aliasName
-                if (alias != null) {
-                    aliased.add(alias)
-                }
-            }
+            remapKtFile()
+        } else {
+            remapJavaFile()
         }
+    }
 
+    private fun remapJavaFile() {
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitClass(psiClass: PsiClass) {
                 val annotation = psiClass.getAnnotation(CLASS_MIXIN) ?: return
@@ -890,77 +889,87 @@ internal class PsiMapper(
             }
         })
 
-        if (file is KtFile) {
-            file.accept(object : KtTreeVisitor<Void>() {
-                override fun visitNamedFunction(function: KtNamedFunction, data: Void?): Void? {
-                    if (changes.isUnchanged(function)) {
-                        map(function, function)
-                    }
-                    return super.visitNamedFunction(function, data)
-                }
+    }
 
-                override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Void?): Void? {
-                    // Dot qualified expressions such as "a.pkg.A.Inner" we want to remap back to front because the
-                    // latter parts are more specific.
-                    // I.e. we start with the inner class, and only if there is no mapping for that, do we try to remap
-                    // the outer class.
-                    expression.selectorExpression?.accept(this)
-                    expression.receiverExpression.accept(this)
-                    return null
-                }
+    private fun remapKtFile() {
+        require(file is KtFile)
 
-                override fun visitUserType(type: KtUserType, data: Void?): Void? {
-                    // Same as visitDotQualifiedExpression but for typealias declarations
-                    type.referenceExpression?.accept(this)
-                    type.qualifier?.accept(this)
-                    type.typeArgumentList?.accept(this)
-                    return null
-                }
-
-                override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
-                    if (changes.isUnchanged(expression)) {
-                        var target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
-                        if (target == null) {
-                            val possibleTargets = bindingContext[BindingContext.AMBIGUOUS_REFERENCE_TARGET, expression]
-                            if (possibleTargets != null && !possibleTargets.isEmpty()) {
-                                val usedTargets = possibleTargets.filter { it in allDirectKtReferences }
-                                val targets = usedTargets.mapNotNull { descriptor ->
-                                    val psi = descriptor.findPsi() ?: return@mapNotNull null
-                                    val mapped = findMappedName(psi) ?: return@mapNotNull null
-                                    Pair(descriptor, mapped)
-                                }
-                                val mappedNames = targets.mapTo(mutableSetOf()) { it.second }
-                                if (mappedNames.size > 1) {
-                                    changes.error(expression, "\"${expression.text}\" is ambiguous and remaps to " +
-                                            "multiple different names: " + mappedNames.joinToString { "\"${it}\"" })
-                                } else if (mappedNames.size == 1) {
-                                    target = targets.first().first
-                                }
-                            }
-                        }
-                        if (target is SyntheticJavaPropertyDescriptor) {
-                            map(expression, target)
-                        } else if (target != null
-                            && ((target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED
-                                    || target is SamConstructorDescriptor)) {
-                            val targetPsi = target.findPsi()
-                            if (targetPsi != null) {
-                                map(expression, targetPsi)
-                            } else if (target is FunctionDescriptor) {
-                                // Appears to be the case if we're referencing an overwritten function in a previously
-                                // compiled kotlin file
-                                // E.g. A.f overwrites B.f overwrites C.f
-                                //      C is a Minecraft class, B is a previously compiled (and already remapped) kotlin
-                                //      class and we're currently in A.f trying to call `super.f()`.
-                                //      `target` is a DeserializedSimpleFunctionDescriptor with no linked PSI element.
-                                map(expression, target)
-                            }
-                        }
-                    }
-                    return super.visitReferenceExpression(expression, data)
-                }
-            }, null)
+        for (importDirective in file.importDirectives) {
+            val alias = importDirective.aliasName
+            if (alias != null) {
+                aliased.add(alias)
+            }
         }
+
+        file.accept(object : KtTreeVisitor<Void>() {
+            override fun visitNamedFunction(function: KtNamedFunction, data: Void?): Void? {
+                if (changes.isUnchanged(function)) {
+                    map(function, function)
+                }
+                return super.visitNamedFunction(function, data)
+            }
+
+            override fun visitDotQualifiedExpression(expression: KtDotQualifiedExpression, data: Void?): Void? {
+                // Dot qualified expressions such as "a.pkg.A.Inner" we want to remap back to front because the
+                // latter parts are more specific.
+                // I.e. we start with the inner class, and only if there is no mapping for that, do we try to remap
+                // the outer class.
+                expression.selectorExpression?.accept(this)
+                expression.receiverExpression.accept(this)
+                return null
+            }
+
+            override fun visitUserType(type: KtUserType, data: Void?): Void? {
+                // Same as visitDotQualifiedExpression but for typealias declarations
+                type.referenceExpression?.accept(this)
+                type.qualifier?.accept(this)
+                type.typeArgumentList?.accept(this)
+                return null
+            }
+
+            override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
+                if (changes.isUnchanged(expression)) {
+                    var target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
+                    if (target == null) {
+                        val possibleTargets = bindingContext[BindingContext.AMBIGUOUS_REFERENCE_TARGET, expression]
+                        if (possibleTargets != null && !possibleTargets.isEmpty()) {
+                            val usedTargets = possibleTargets.filter { it in allDirectKtReferences }
+                            val targets = usedTargets.mapNotNull { descriptor ->
+                                val psi = descriptor.findPsi() ?: return@mapNotNull null
+                                val mapped = findMappedName(psi) ?: return@mapNotNull null
+                                Pair(descriptor, mapped)
+                            }
+                            val mappedNames = targets.mapTo(mutableSetOf()) { it.second }
+                            if (mappedNames.size > 1) {
+                                changes.error(expression, "\"${expression.text}\" is ambiguous and remaps to " +
+                                        "multiple different names: " + mappedNames.joinToString { "\"${it}\"" })
+                            } else if (mappedNames.size == 1) {
+                                target = targets.first().first
+                            }
+                        }
+                    }
+                    if (target is SyntheticJavaPropertyDescriptor) {
+                        map(expression, target)
+                    } else if (target != null
+                        && ((target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED
+                                || target is SamConstructorDescriptor)) {
+                        val targetPsi = target.findPsi()
+                        if (targetPsi != null) {
+                            map(expression, targetPsi)
+                        } else if (target is FunctionDescriptor) {
+                            // Appears to be the case if we're referencing an overwritten function in a previously
+                            // compiled kotlin file
+                            // E.g. A.f overwrites B.f overwrites C.f
+                            //      C is a Minecraft class, B is a previously compiled (and already remapped) kotlin
+                            //      class and we're currently in A.f trying to call `super.f()`.
+                            //      `target` is a DeserializedSimpleFunctionDescriptor with no linked PSI element.
+                            map(expression, target)
+                        }
+                    }
+                }
+                return super.visitReferenceExpression(expression, data)
+            }
+        }, null)
     }
 
     companion object {
