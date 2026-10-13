@@ -377,12 +377,6 @@ internal class PsiMapper(
         }
     }
 
-    private fun map(expr: PsiElement, resolved: PsiQualifiedNamedElement) {
-        val name = resolved.qualifiedName ?: return
-        val dollarName = (if (resolved is PsiClass) resolved.dollarQualifiedName else name) ?: return
-        map(expr, name, dollarName)
-    }
-
     private fun map(expr: PsiElement, resolved: KtClassOrObject) {
         val fqName = resolved.fqName ?: return
         val classes = generateSequence(resolved) { it.getParentOfType<KtClassOrObject>(true) }.toMutableList()
@@ -453,7 +447,7 @@ internal class PsiMapper(
             is PsiField -> map(expr, resolved)
             is PsiMethod -> map(expr, resolved)
             is KtNamedFunction -> map(expr, resolved.getRepresentativeLightMethod())
-            is PsiClass, is PsiPackage -> map(expr, resolved as PsiQualifiedNamedElement)
+            is PsiClass -> map(expr, resolved.qualifiedName ?: return, resolved.dollarQualifiedName ?: return)
             is KtClassOrObject -> map(expr, resolved)
         }
     }
