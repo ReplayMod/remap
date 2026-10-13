@@ -43,57 +43,23 @@ internal class PsiMapper(
         private val remappedProject: Project?,
         private val file: PsiFile,
         private val bindingContext: BindingContext,
-        private val patterns: PsiPatterns?
+        private val changes: Changes,
 ) {
     private var mixinTarget: PsiClass? = null
     private val mixinTargets = mutableMapOf<String, PsiClass>()
     private val mixinMappings = mutableMapOf<String, ClassMapping<*, *>>()
     private val aliased = mutableSetOf<String>()
-    private val errors = mutableListOf<Pair<Int, String>>()
-    private val changes = TreeMap<TextRange, String>(compareBy<TextRange> { it.startOffset }.thenBy { it.endOffset })
-
-    private fun error(at: PsiElement, message: String) {
-        val line = StringUtil.offsetToLineNumber(file.text, at.textOffset)
-        errors.add(Pair(line, message))
-    }
-
-    private fun replace(e: PsiElement, with: String) = replace(e.textRange, with)
-    private fun replace(textRange: TextRange, with: String) {
-        changes.compute(textRange) { _, replacement ->
-            if (replacement != null) {
-                replacement + with
-            } else {
-                with
-            }
-        }
-    }
 
     private fun replaceIdentifier(parent: PsiElement, with: String) {
         var child = parent.firstChild
         while (child != null) {
             if (child is PsiIdentifier
                     || child is ASTNode && child.elementType == KtTokens.IDENTIFIER) {
-                replace(child, with)
+                changes.replace(child, with)
                 return
             }
             child = child.nextSibling
         }
-    }
-
-    private fun valid(e: PsiElement): Boolean = valid(e.textRange)
-
-    private fun valid(range: TextRange): Boolean {
-        val before = changes.floorKey(range) ?: TextRange.EMPTY_RANGE
-        val after = changes.ceilingKey(range) ?: TextRange.EMPTY_RANGE
-        return !before.intersectsStrict(range) && !after.intersectsStrict(range)
-    }
-
-    private fun getResult(text: String): Pair<String, List<Pair<Int, String>>> {
-        var result = text
-        for ((key, value) in changes.descendingMap()) {
-            result = key.replace(result, value)
-        }
-        return Pair(result, errors)
     }
 
     private fun findPsiClass(name: String, project: Project = file.project) =
@@ -109,7 +75,7 @@ internal class PsiMapper(
                 && !expr.isQualified // qualified access is fine
                 && !isSwitchCase(expr) // referencing constants in case statements is fine
         ) {
-            error(expr, "Implicit member reference to remapped field \"$fieldName\". " +
+            changes.error(expr, "Implicit member reference to remapped field \"$fieldName\". " +
                     "This can cause issues if the remapped reference becomes shadowed by a local variable and is therefore forbidden. " +
                     "Use \"this.$fieldName\" instead.")
         }
@@ -152,7 +118,7 @@ internal class PsiMapper(
                 // isn't (as should be the case for remapped names), we can also write that as `entity.isNonBoss` (i.e.
                 // as a synthetic property).
                 // This is the reverse to the operation in [map(PsiElement, SyntheticJavaPropertyDescriptor)].
-                replace(expr.parent, maybeGetter.identifier)
+                changes.replace(expr.parent, maybeGetter.identifier)
                 return
             }
 
@@ -163,11 +129,11 @@ internal class PsiMapper(
                 if (maybeSetter != null && argumentList != null) {
                     val leftParen = argumentList.leftParenthesis!!
                     val rightParen = argumentList.rightParenthesis!!
-                    replace(TextRange(
+                    changes.replace(TextRange(
                         expr.startOffset,
                         leftParen.endOffset,
                     ), "$maybeSetter =" + if (leftParen.nextSibling is PsiWhiteSpace) "" else " ")
-                    replace(rightParen, "")
+                    changes.replace(rightParen, "")
                     return
                 }
             }
@@ -291,13 +257,13 @@ internal class PsiMapper(
             }
             if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mappingSetter, expr)) {
                 val op = assignment.operationReference
-                replace(TextRange(
+                changes.replace(TextRange(
                     expr.startOffset,
                     // If there is a single whitespace after the operation element, eat it, otherwise don't
                     op.endOffset + if ((op.nextSibling as? PsiWhiteSpace)?.textLength == 1) 1 else 0
                 ), "$mappedSetter(")
                 val right = assignment.right!!
-                replace(TextRange(right.endOffset, right.endOffset), ")")
+                changes.replace(TextRange(right.endOffset, right.endOffset), ")")
             } else {
                 val mapped = maybeMapped.identifier
                 replaceIdentifier(expr, mapped)
@@ -428,7 +394,7 @@ internal class PsiMapper(
 
         // Fully qualified, obvious case
         if (expr.text == name) {
-            replace(expr, mapped)
+            changes.replace(expr, mapped)
             return
         }
 
@@ -458,10 +424,10 @@ internal class PsiMapper(
         val simpleName = name.substringAfterLast(".")
         val qualifierName = name.substringBeforeLast(".")
         if (qualifiedExpr?.text == simpleName && qualifierExpr?.text == qualifierName) {
-            if (valid(qualifierExpr)) {
-                replace(qualifierExpr, mapped.substringBeforeLast("."))
+            if (changes.isUnchanged(qualifierExpr)) {
+                changes.replace(qualifierExpr, mapped.substringBeforeLast("."))
             }
-            replace(qualifiedExpr, mapped.substringAfterLast("."))
+            changes.replace(qualifiedExpr, mapped.substringAfterLast("."))
             return
         }
 
@@ -532,7 +498,7 @@ internal class PsiMapper(
                 val mapping = map.findPotentialInnerClassMapping(qualifiedName) ?: continue
                 val mapped = mapping.fullDeobfuscatedName?.replace('/', '.')
                 if (mapped != qualifiedName) {
-                    replace(value, "\"$mapped\"")
+                    changes.replace(value, "\"$mapped\"")
                 }
                 val psiClass = findPsiClass(qualifiedName) ?: continue
                 return Pair(psiClass, mapping)
@@ -568,7 +534,7 @@ internal class PsiMapper(
                 }
                 if (mapped != null && mapped != target) {
                     // Update accessor target
-                    replace(annotation.parameterList, if (mapped == targetByName) {
+                    changes.replace(annotation.parameterList, if (mapped == targetByName) {
                         // Mapped name matches implied target, can just remove the explict target
                         ""
                     } else {
@@ -603,7 +569,7 @@ internal class PsiMapper(
                             targetMethods.find { it.desc == targetDesc }
                         } else {
                             if (targetMethods.size > 1) {
-                                error(literalExpr,
+                                changes.error(literalExpr,
                                     "Ambiguous mixin method \"$targetName\" may refer to any of: " +
                                             targetMethods.joinToString { "\"${it.name}${it.desc}\"" })
                             }
@@ -634,7 +600,7 @@ internal class PsiMapper(
                                 // If there's multiple such methods, we need to include the descriptor.
                                 val mappedDesc = (targetMethod?.desc ?: targetDesc)?.let { remapMethodDesc(it) }
                                 if (mappedMethods.none { it.desc == mappedDesc }) {
-                                    error(literalExpr,
+                                    changes.error(literalExpr,
                                         "Mixin target \"$targetName\" cannot be automatically remapped " +
                                                 "as there are multiple methods with the same remapped name: " +
                                                 mappedMethods.joinToString { "\"${it.name}${it.desc}\"" })
@@ -649,8 +615,8 @@ internal class PsiMapper(
                         }
                         val mapped = mappedName + mappedDesc
 
-                        if (mapped != literalValue && valid(literalExpr)) {
-                            replace(literalExpr, '"'.toString() + mapped + '"'.toString())
+                        if (mapped != literalValue && changes.isUnchanged(literalExpr)) {
+                            changes.replace(literalExpr, '"'.toString() + mapped + '"'.toString())
                         }
 
                         continue
@@ -666,7 +632,7 @@ internal class PsiMapper(
                         }
                     } else {
                         if (targetMethods.size > 1) {
-                            error(literalExpr, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString { 
+                            changes.error(literalExpr, "Ambiguous mixin method \"$targetName\" may refer to any of: ${targetMethods.joinToString {
                                 "\"${it.name}${ClassUtil.getAsmMethodSignature(it)}\"" 
                             }}")
                         }
@@ -682,8 +648,8 @@ internal class PsiMapper(
                         else -> ""
                     }
 
-                    if (mapped != literalValue && valid(literalExpr)) {
-                        replace(literalExpr, '"'.toString() + mapped + '"'.toString())
+                    if (mapped != literalValue && changes.isUnchanged(literalExpr)) {
+                        changes.replace(literalExpr, '"'.toString() + mapped + '"'.toString())
                     }
                 }
             }
@@ -807,25 +773,12 @@ internal class PsiMapper(
                     if ("target" != attribute.name) continue
                     val (value, signature) = attribute.resolvedLiteralValue ?: continue
                     val newSignature = remapMixinTarget(signature)
-                    if (newSignature != signature && valid(value)) {
-                        replace(value, "\"$newSignature\"")
+                    if (newSignature != signature && changes.isUnchanged(value)) {
+                        changes.replace(value, "\"$newSignature\"")
                     }
                 }
             }
         })
-    }
-
-    private fun applyPatternMatch(matcher: PsiPattern.Matcher) {
-        val changes = matcher.toChanges()
-        if (changes.all { valid(it.first) }) {
-            changes.forEach { (range, text) -> replace(range, text)}
-        } else if (changes.any { it.first !in this.changes }) {
-            System.err.println("Conflicting pattern changes in $file")
-            System.err.println("Proposed changes:")
-            changes.forEach { println("${it.first}: \"${it.second}\" (${if (valid(it.first)) "accepted" else "rejected"})") }
-            System.err.println("Current changes:")
-            this.changes.forEach { println("${it.key}: \"${it.value}\"") }
-        }
     }
 
     private val allDirectJavaReferences by lazy {
@@ -855,7 +808,7 @@ internal class PsiMapper(
         }
     }
 
-    fun remapFile(): Pair<String, List<Pair<Int, String>>> {
+    fun remapFile() {
         if (file is KtFile) {
             for (importDirective in file.importDirectives) {
                 val alias = importDirective.aliasName
@@ -863,18 +816,6 @@ internal class PsiMapper(
                     aliased.add(alias)
                 }
             }
-        }
-
-        if (patterns != null) {
-            file.accept(object : JavaRecursiveElementVisitor() {
-                override fun visitCodeBlock(block: PsiCodeBlock) {
-                    patterns.find(block).forEach { applyPatternMatch(it) }
-                }
-
-                override fun visitExpression(expression: PsiExpression) {
-                    patterns.find(expression).forEach { applyPatternMatch(it) }
-                }
-            })
         }
 
         file.accept(object : JavaRecursiveElementVisitor() {
@@ -902,28 +843,28 @@ internal class PsiMapper(
 
         file.accept(object : JavaRecursiveElementVisitor() {
             override fun visitField(field: PsiField) {
-                if (valid(field)) {
+                if (changes.isUnchanged(field)) {
                     map(field, field)
                 }
                 super.visitField(field)
             }
 
             override fun visitMethod(method: PsiMethod) {
-                if (valid(method)) {
+                if (changes.isUnchanged(method)) {
                     map(method, method)
                 }
                 super.visitMethod(method)
             }
 
             override fun visitReferenceElement(reference: PsiJavaCodeReferenceElement) {
-                if (valid(reference)) {
+                if (changes.isUnchanged(reference)) {
                     map(reference, reference.resolve())
                 }
                 super.visitReferenceElement(reference)
             }
 
             override fun visitImportStaticReferenceElement(reference: PsiImportStaticReferenceElement) {
-                if (valid(reference)) {
+                if (changes.isUnchanged(reference)) {
                     var resolved = reference.resolve()
                     if (resolved == null) {
                         val possibleTargets = reference.multiResolve(false)
@@ -936,7 +877,7 @@ internal class PsiMapper(
                             }
                             val mappedNames = targets.mapTo(mutableSetOf()) { it.second }
                             if (mappedNames.size > 1) {
-                                error(reference, "\"${reference.text}\" is ambiguous and remaps to " +
+                                changes.error(reference, "\"${reference.text}\" is ambiguous and remaps to " +
                                         "multiple different names: " + mappedNames.joinToString { "\"${it}\"" })
                             } else if (mappedNames.size == 1) {
                                 resolved = targets.first().first
@@ -952,7 +893,7 @@ internal class PsiMapper(
         if (file is KtFile) {
             file.accept(object : KtTreeVisitor<Void>() {
                 override fun visitNamedFunction(function: KtNamedFunction, data: Void?): Void? {
-                    if (valid(function)) {
+                    if (changes.isUnchanged(function)) {
                         map(function, function)
                     }
                     return super.visitNamedFunction(function, data)
@@ -977,7 +918,7 @@ internal class PsiMapper(
                 }
 
                 override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
-                    if (valid(expression)) {
+                    if (changes.isUnchanged(expression)) {
                         var target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
                         if (target == null) {
                             val possibleTargets = bindingContext[BindingContext.AMBIGUOUS_REFERENCE_TARGET, expression]
@@ -990,7 +931,7 @@ internal class PsiMapper(
                                 }
                                 val mappedNames = targets.mapTo(mutableSetOf()) { it.second }
                                 if (mappedNames.size > 1) {
-                                    error(expression, "\"${expression.text}\" is ambiguous and remaps to " +
+                                    changes.error(expression, "\"${expression.text}\" is ambiguous and remaps to " +
                                             "multiple different names: " + mappedNames.joinToString { "\"${it}\"" })
                                 } else if (mappedNames.size == 1) {
                                     target = targets.first().first
@@ -1020,8 +961,6 @@ internal class PsiMapper(
                 }
             }, null)
         }
-
-        return getResult(file.text)
     }
 
     companion object {

@@ -156,7 +156,12 @@ class Transformer(private val map: MappingSet) {
                 val psiFile = psiManager.findFile(file)!!
 
                 var (text, errors) = try {
-                    PsiMapper(map, remappedEnv?.project, psiFile, analysis.bindingContext, patterns).remapFile()
+                    val changes = Changes(psiFile)
+                    if (patterns != null) {
+                        applyPatterns(psiFile, changes, patterns)
+                    }
+                    PsiMapper(map, remappedEnv?.project, psiFile, analysis.bindingContext, changes).remapFile()
+                    changes.getResult()
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)
                 }

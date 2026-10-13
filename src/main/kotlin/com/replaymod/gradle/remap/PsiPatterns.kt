@@ -93,3 +93,28 @@ internal class PsiPatterns(private val annotationFQN: String) {
         return results
     }
 }
+
+internal fun applyPatterns(file: PsiFile, changes: Changes, patterns: PsiPatterns) {
+    fun applyPatternMatch(matcher: Matcher) {
+        val proposedChanges = matcher.toChanges()
+        if (proposedChanges.all { changes.isUnchanged(it.first) }) {
+            proposedChanges.forEach { (range, text) -> changes.replace(range, text)}
+        } else if (proposedChanges.any { it.first !in changes.changes }) {
+            System.err.println("Conflicting pattern changes in $file")
+            System.err.println("Proposed changes:")
+            proposedChanges.forEach { println("${it.first}: \"${it.second}\" (${if (changes.isUnchanged(it.first)) "accepted" else "rejected"})") }
+            System.err.println("Current changes:")
+            changes.changes.forEach { println("${it.key}: \"${it.value}\"") }
+        }
+    }
+
+    file.accept(object : JavaRecursiveElementVisitor() {
+        override fun visitCodeBlock(block: PsiCodeBlock) {
+            patterns.find(block).forEach { applyPatternMatch(it) }
+        }
+
+        override fun visitExpression(expression: PsiExpression) {
+            patterns.find(expression).forEach { applyPatternMatch(it) }
+        }
+    })
+}
