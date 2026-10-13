@@ -104,7 +104,14 @@ public class B extends BParent implements BInterface {
 
             @Override
             public B getB() {
-                return bLocal;
+                return new B() {
+                    private int bDoubleAnonField;
+
+                    @Override
+                    public B getB() {
+                        return bLocal;
+                    }
+                };
             }
         };
     }

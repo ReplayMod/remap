@@ -319,4 +319,23 @@ class TestMixinInjections {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps shadow targeting field in nested anonymous class`() {
+        TestData.remap($$"""
+            @org.spongepowered.asm.mixin.Mixin(targets = "a.pkg.A$1$1")
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Shadow
+                int aDoubleAnonField;
+                private int test() { return this.aDoubleAnonField; }
+            }
+        """.trimIndent()) shouldBe $$"""
+            @org.spongepowered.asm.mixin.Mixin(targets = "b.pkg.B$1$1")
+            abstract class MixinA {
+                @org.spongepowered.asm.mixin.Shadow
+                int bDoubleAnonField;
+                private int test() { return this.bDoubleAnonField; }
+            }
+        """.trimIndent()
+    }
 }

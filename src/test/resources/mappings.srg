@@ -35,6 +35,8 @@ MD: a/pkg/A/aAmbiguousMethod (I)La/pkg/A; b/pkg/B/bAmbiguousMethodWithInt (I)Lb/
 CL: a/pkg/A$1 b/pkg/B$1
 FD: a/pkg/A$1/val$aLocal b/pkg/B$1/val$bLocal
 FD: a/pkg/A$1/aAnonField b/pkg/B$1/bAnonField
+CL: a/pkg/A$1$1 b/pkg/B$1$1
+FD: a/pkg/A$1$1/aDoubleAnonField b/pkg/B$1$1/bDoubleAnonField
 CL: a/pkg/A$Inner b/pkg/B$Inner
 FD: a/pkg/A$Inner/aField b/pkg/B$Inner/bField
 CL: a/pkg/A$NestedA b/pkg/B$NestedB

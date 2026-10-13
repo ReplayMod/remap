@@ -107,7 +107,14 @@ public class A extends AParent implements AInterface {
 
             @Override
             public A getA() {
-                return aLocal;
+                return new A() {
+                    private int aDoubleAnonField;
+
+                    @Override
+                    public A getA() {
+                        return aLocal;
+                    }
+                };
             }
         };
     }
