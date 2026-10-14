@@ -1,6 +1,5 @@
 package com.replaymod.gradle.remap
 
-import com.replaymod.gradle.remap.legacy.LegacyMapping
 import org.cadixdev.lorenz.MappingSet
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
@@ -33,17 +32,14 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.utils.PathUtil
-import java.io.BufferedReader
 import java.io.File
 import java.io.IOException
-import java.io.InputStreamReader
 import java.lang.Exception
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.*
-import kotlin.system.exitProcess
 
 class Transformer(private val map: MappingSet) {
     var classpath: Array<String>? = null
@@ -217,55 +213,6 @@ class Transformer(private val map: MappingSet) {
             environment.configuration,
             { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
         )
-    }
-
-    companion object {
-
-        @Throws(IOException::class)
-        @JvmStatic
-        fun main(args: Array<String>) {
-            val mappings: MappingSet = if (args[0].isEmpty()) {
-                MappingSet.create()
-            } else {
-                LegacyMapping.readMappingSet(File(args[0]).toPath(), args[1] == "true")
-            }
-            val transformer = Transformer(mappings)
-
-            val reader = BufferedReader(InputStreamReader(System.`in`))
-
-            transformer.classpath = (1..Integer.parseInt(args[2])).map { reader.readLine() }.toTypedArray()
-
-            val sources = mutableMapOf<String, String>()
-            while (true) {
-                val name = reader.readLine()
-                if (name == null || name.isEmpty()) {
-                    break
-                }
-
-                val lines = arrayOfNulls<String>(Integer.parseInt(reader.readLine()))
-                for (i in lines.indices) {
-                    lines[i] = reader.readLine()
-                }
-                val source = lines.joinToString("\n")
-
-                sources[name] = source
-            }
-
-            val results = transformer.remap(sources)
-
-            for (name in sources.keys) {
-                println(name)
-                val lines = results.getValue(name).first.split("\n").dropLastWhile { it.isEmpty() }.toTypedArray()
-                println(lines.size)
-                for (line in lines) {
-                    println(line)
-                }
-            }
-
-            if (results.any { it.value.second.isNotEmpty() }) {
-                exitProcess(1)
-            }
-        }
     }
 
 }
