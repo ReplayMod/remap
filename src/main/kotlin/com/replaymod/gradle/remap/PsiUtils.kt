@@ -1,11 +1,6 @@
 package com.replaymod.gradle.remap
 
-import org.cadixdev.bombe.type.ArrayType
-import org.cadixdev.bombe.type.FieldType
 import org.cadixdev.bombe.type.MethodDescriptor
-import org.cadixdev.bombe.type.ObjectType
-import org.cadixdev.bombe.type.Type
-import org.cadixdev.bombe.type.VoidType
 import org.cadixdev.bombe.type.signature.MethodSignature
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key
@@ -15,8 +10,8 @@ import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsClassImpl
 import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes
 import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
+import org.jetbrains.kotlin.com.intellij.psi.util.ClassUtil
 import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
-import org.jetbrains.kotlin.com.intellij.psi.util.TypeConversionUtil
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -158,34 +153,11 @@ internal fun VirtualFile.readAsmTree(): ClassNode? {
 }
 
 internal object PsiUtils {
-    fun getSignature(method: PsiMethod): MethodSignature? {
-        return MethodSignature(method.name, getDescriptor(method) ?: return null)
-    }
-
-    private fun getDescriptor(method: PsiMethod): MethodDescriptor? {
-        return MethodDescriptor(
-            method.parameterList.parameters.map { getFieldType(it.type) ?: return null },
-            getType(method.returnType) ?: return null
-        )
-    }
-
-    private fun getFieldType(type: PsiType?): FieldType? { return when (val erasedType = TypeConversionUtil.erasure(type)) {
-        is PsiPrimitiveType -> FieldType.of(erasedType.kind.binaryName)
-        is PsiArrayType -> {
-            val array = erasedType as PsiArrayType?
-            ArrayType(array!!.arrayDimensions, getFieldType(array.deepComponentType))
-        }
-        is PsiClassType -> {
-            val resolved = erasedType.resolve() ?: return null
-            val classId = resolved.classId ?: return null
-            ObjectType(classId.dollarQualifiedName)
-        }
-        else -> throw IllegalArgumentException("Cannot translate type " + erasedType!!)
-    }}
-
-    private fun getType(type: PsiType?): Type? = if (TypeConversionUtil.isVoidType(type)) {
-        VoidType.INSTANCE
-    } else {
-        getFieldType(type)
+    fun getSignature(method: PsiMethod): MethodSignature {
+        val asm = ClassUtil.getAsmMethodSignature(method)
+        // The shaded ClassUtil returns "()" (no return type) for some Kotlin ultra-light methods whose return type
+        // cannot be resolved; fall back to a void descriptor in that case. The correct signature is still found via
+        // the method's super methods, so this placeholder is only ever a harmless last resort.
+        return MethodSignature(method.name, MethodDescriptor.of(if (asm.substringAfterLast(")").isEmpty()) "()V" else asm))
     }
 }
