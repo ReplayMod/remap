@@ -1,8 +1,6 @@
 package com.replaymod.gradle.remap.util
 
 import com.replaymod.gradle.remap.Transformer
-import com.replaymod.gradle.remap.legacy.LegacyMappingSetModelFactory
-import org.cadixdev.lorenz.MappingSet
 import java.io.File
 import java.net.URL
 import java.nio.file.Paths
@@ -10,11 +8,7 @@ import kotlin.io.path.absolutePathString
 
 object TestData {
     private val mappingsPath = Paths.get(javaClass.getResource("/mappings.srg")!!.toURI())
-    private val mappings = mappingsPath.readMappings().let { mappings ->
-        val legacyCopy = MappingSet.create(LegacyMappingSetModelFactory())
-        mappings.topLevelClassMappings.forEach { it.copy(legacyCopy) }
-        legacyCopy
-    }
+    private val mappings = mappingsPath.readMappings()
 
     val transformer = Transformer(mappings).apply {
         fun findClasspathEntry(cls: String): String {
