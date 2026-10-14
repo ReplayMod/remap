@@ -1,7 +1,5 @@
 package com.replaymod.gradle.remap
 
-import org.cadixdev.bombe.type.MethodDescriptor
-import org.cadixdev.bombe.type.signature.MethodSignature
 import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.util.Key
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
@@ -152,12 +150,10 @@ internal fun VirtualFile.readAsmTree(): ClassNode? {
     return node
 }
 
+data class MethodSignature(val name: String, val desc: String)
+
 internal object PsiUtils {
     fun getSignature(method: PsiMethod): MethodSignature {
-        val asm = ClassUtil.getAsmMethodSignature(method)
-        // The shaded ClassUtil returns "()" (no return type) for some Kotlin ultra-light methods whose return type
-        // cannot be resolved; fall back to a void descriptor in that case. The correct signature is still found via
-        // the method's super methods, so this placeholder is only ever a harmless last resort.
-        return MethodSignature(method.name, MethodDescriptor.of(if (asm.substringAfterLast(")").isEmpty()) "()V" else asm))
+        return MethodSignature(method.name, ClassUtil.getAsmMethodSignature(method))
     }
 }

@@ -1,6 +1,6 @@
 package com.replaymod.gradle.remap
 
-import org.cadixdev.lorenz.MappingSet
+import net.fabricmc.mappingio.tree.MappingTreeView
 import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.config.ContentRoot
@@ -41,7 +41,9 @@ import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 import java.util.*
 
-class Transformer(private val map: MappingSet) {
+class Transformer(
+    private val mappingTree: MappingTreeView,
+) {
     var classpath: Array<String>? = null
     var remappedClasspath: Array<String>? = null
     var jdkHome: File? = null
@@ -156,7 +158,7 @@ class Transformer(private val map: MappingSet) {
                     if (patterns != null) {
                         applyPatterns(psiFile, changes, patterns)
                     }
-                    PsiMapper(map, remappedEnv?.project, psiFile, analysis.bindingContext, changes).remapFile()
+                    PsiMapper(mappingTree, remappedEnv?.project, psiFile, analysis.bindingContext, changes).remapFile()
                     changes.getResult()
                 } catch (e: Exception) {
                     throw RuntimeException("Failed to map file \"$name\".", e)

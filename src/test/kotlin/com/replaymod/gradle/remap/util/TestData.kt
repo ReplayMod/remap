@@ -1,6 +1,8 @@
 package com.replaymod.gradle.remap.util
 
 import com.replaymod.gradle.remap.Transformer
+import net.fabricmc.mappingio.MappingReader
+import net.fabricmc.mappingio.tree.MemoryMappingTree
 import java.io.File
 import java.net.URL
 import java.nio.file.Paths
@@ -8,7 +10,9 @@ import kotlin.io.path.absolutePathString
 
 object TestData {
     private val mappingsPath = Paths.get(javaClass.getResource("/mappings.srg")!!.toURI())
-    private val mappings = mappingsPath.readMappings()
+    private val mappings = MemoryMappingTree().also { tree ->
+        MappingReader.read(mappingsPath, tree)
+    }
 
     val transformer = Transformer(mappings).apply {
         fun findClasspathEntry(cls: String): String {
