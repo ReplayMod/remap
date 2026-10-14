@@ -147,6 +147,7 @@ internal fun VirtualFile.getAsmTree(): ClassNode? {
     }
 }
 internal fun VirtualFile.readAsmTree(): ClassNode? {
+    if (extension != "class") return null
     val bytes = contentsToByteArray()
     val node = ClassNode()
     val reader = ClassReader(bytes)

@@ -53,7 +53,7 @@ object TestData {
         manageImports = true
     }
 
-    private fun Map<String, Pair<String, List<Pair<Int, String>>>>.expectNoErrors(): Map<String, String> {
+    fun Map<String, Pair<String, List<Pair<Int, String>>>>.expectNoErrors(): Map<String, String> {
         return mapValues { (file, result) ->
             val (content, errors) = result
             if (errors.isNotEmpty()) {
