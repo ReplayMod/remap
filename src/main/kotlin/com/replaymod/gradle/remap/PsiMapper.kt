@@ -563,7 +563,8 @@ internal class PsiMapper(
     context(mixinContext: MixinContext)
     private fun mapMixinMethodTarget(literalExpr: PsiLiteralExpression, literalValue: String) {
         val (targetName, targetDesc) = if ('(' in literalValue) {
-            MethodSignature.of(literalValue).let { it.name to it.descriptor.toString() }
+            val split = literalValue.indexOf('(')
+            literalValue.substring(0, split) to literalValue.substring(split)
         } else {
             literalValue to null
         }
