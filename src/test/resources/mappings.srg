@@ -43,7 +43,7 @@ CL: a/pkg/A$NestedA b/pkg/B$NestedB
 CL: a/pkg/A$GenericA b/pkg/B$GenericB
 MD: a/pkg/A$GenericA/aMethod (Ljava/lang/Object;)V b/pkg/B$GenericB/bMethod (Ljava/lang/Object;)V
 CL: a/pkg/AParent b/pkg/BParent
-MD: a/pkg/AParent/aParentMethod ()V b/pkg/BParent/bParentMethod ()V
+MD: a/pkg/AParent/aParentMethod ()La/pkg/AParent; b/pkg/BParent/bParentMethod ()Lb/pkg/BParent;
 MD: a/pkg/AParent/aSpecializableMethod ()La/pkg/AParent; b/pkg/BParent/bSpecializableMethod ()Lb/pkg/BParent;
 MD: a/pkg/AParent/aSpecializableMethodWithChangingSignature ()La/pkg/AParent; b/pkg/BParent/bSpecializableMethodWithChangingSignature (I)Lb/pkg/BParent;
 CL: a/pkg/AInterface b/pkg/BInterface
