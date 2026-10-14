@@ -148,6 +148,10 @@ public class A extends AParent implements AInterface {
     public static class NestedA extends A {
     }
 
+    // mapped to "NowInBParent"
+    public static class CurrentlyInA extends A {
+    }
+
     public static class GenericA<T> {
         public void aMethod(T t) {}
     }

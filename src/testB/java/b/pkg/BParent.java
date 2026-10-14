@@ -12,4 +12,8 @@ public class BParent {
     public BParent bSpecializableMethodWithChangingSignature(int newArgument) {
         return this;
     }
+
+    // mapped from "CurrentlyInA"
+    public static class NowInBParent extends B {
+    }
 }

@@ -51,6 +51,21 @@ class TestReferences {
     }
 
     @Test
+    fun `remaps imported inner class references with changing outer class`() {
+        TestData.remapKt("""
+            import a.pkg.A.CurrentlyInA
+            fun test(): CurrentlyInA {
+                return CurrentlyInA()
+            }
+        """.trimIndent()) shouldBe """
+            import b.pkg.BParent.NowInBParent
+            fun test(): NowInBParent {
+                return NowInBParent()
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps fully qualified class references`() {
         TestData.remapKt("""
             fun test(): a.pkg.A {

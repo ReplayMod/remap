@@ -65,6 +65,25 @@ class TestReferences {
     }
 
     @Test
+    fun `remaps imported inner class references with changing outer class`() {
+        TestData.remap("""
+            import a.pkg.A.CurrentlyInA;
+            class test {
+                CurrentlyInA test() {
+                    return new CurrentlyInA();
+                }
+            }
+        """.trimIndent()) shouldBe """
+            import b.pkg.BParent.NowInBParent;
+            class test {
+                NowInBParent test() {
+                    return new NowInBParent();
+                }
+            }
+        """.trimIndent()
+    }
+
+    @Test
     fun `remaps fully qualified class references`() {
         TestData.remap("""
             class test {

@@ -70,4 +70,22 @@ class TestMixinAnnotation {
             class MixinA { @Shadow private int bAnonField; }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps nested class which is moved to different outer class`() {
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.CurrentlyInA.class)
+            class TestMixin {}
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.BParent.NowInBParent.class)
+            class TestMixin {}
+        """.trimIndent()
+        TestData.remap("""
+            @org.spongepowered.asm.mixin.Mixin(targets = "a.pkg.A${'$'}CurrentlyInA")
+            class TestMixin {}
+        """.trimIndent()) shouldBe """
+            @org.spongepowered.asm.mixin.Mixin(targets = "b.pkg.BParent${'$'}NowInBParent")
+            class TestMixin {}
+        """.trimIndent()
+    }
 }
