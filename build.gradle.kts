@@ -53,6 +53,10 @@ tasks.test {
 
 tasks.compileKotlin {
     compilerOptions {
+        // Context parameters become stable in 2.4, but Gradle 9 only guarantees 2.2 which can't compile against 2.4
+        // libraries. So to avoid requiring all consumers to upgrade their Gradle, we'll target an older version and
+        // opt-in to context parameters via the `-X` option.
+        freeCompilerArgs.add("-Xcontext-parameters")
         apiVersion.set(KotlinVersion.KOTLIN_2_2)
         languageVersion.set(KotlinVersion.KOTLIN_2_2)
     }
