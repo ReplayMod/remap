@@ -19,13 +19,8 @@ repositories {
 val testA = sourceSets.create("testA")
 val testB = sourceSets.create("testB")
 
-kotlinVersion("1.5.21", isPrimaryVersion = true)
-kotlinVersion("1.6.20")
-kotlinVersion("1.9.0")
-kotlinVersion("2.0.0")
-
 dependencies {
-    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.21")
+    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.0")
     implementation(kotlin("stdlib"))
     implementation("org.ow2.asm:asm-tree:9.9.1")
     api("org.cadixdev:lorenz:0.5.0")
@@ -60,34 +55,5 @@ tasks.compileKotlin {
     compilerOptions {
         apiVersion.set(KotlinVersion.KOTLIN_1_9)
         languageVersion.set(KotlinVersion.KOTLIN_1_9)
-    }
-}
-
-fun kotlinVersion(version: String, isPrimaryVersion: Boolean = false) {
-    val name = version.replace(".", "")
-
-    val sourceSet = sourceSets.create("kotlin$name")
-
-    val testClasspath = configurations.create("kotlin${name}TestClasspath") {
-        extendsFrom(configurations.testRuntimeClasspath.get())
-        extendsFrom(configurations[sourceSet.compileOnlyConfigurationName])
-    }
-
-    dependencies {
-        implementation(sourceSet.output)
-        sourceSet.compileOnlyConfigurationName("org.jetbrains.kotlin:kotlin-compiler-embeddable:$version")
-    }
-
-    tasks.jar {
-        from(sourceSet.output)
-    }
-
-    if (!isPrimaryVersion) {
-        val testTask = tasks.register("testKotlin$name", Test::class) {
-            useJUnitPlatform()
-            testClassesDirs = sourceSets.test.get().output.classesDirs
-            classpath = testClasspath + sourceSets.test.get().output + sourceSets.main.get().output
-        }
-        tasks.check { dependsOn(testTask) }
     }
 }

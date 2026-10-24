@@ -2,13 +2,17 @@ package com.replaymod.gradle.remap
 
 import com.replaymod.gradle.remap.legacy.LegacyMapping
 import org.cadixdev.lorenz.MappingSet
+import org.jetbrains.kotlin.analyzer.AnalysisResult
 import org.jetbrains.kotlin.cli.common.CLIConfigurationKeys
 import org.jetbrains.kotlin.cli.common.config.ContentRoot
+import org.jetbrains.kotlin.cli.common.config.KotlinSourceRoot
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.cli.common.messages.MessageRenderer
 import org.jetbrains.kotlin.cli.common.messages.PrintingMessageCollector
 import org.jetbrains.kotlin.cli.jvm.compiler.EnvironmentConfigFiles
 import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.cli.jvm.compiler.NoScopeRecordCliBindingTrace
+import org.jetbrains.kotlin.cli.jvm.compiler.TopDownAnalyzerFacadeForJVM
 import org.jetbrains.kotlin.cli.jvm.config.JavaSourceRoot
 import org.jetbrains.kotlin.cli.jvm.config.JvmClasspathRoot
 import org.jetbrains.kotlin.cli.jvm.modules.CoreJrtFileSystem
@@ -23,6 +27,7 @@ import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.local.CoreLocalFileSystem
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager
+import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
 import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.JVMConfigurationKeys
@@ -74,12 +79,7 @@ class Transformer(private val map: MappingSet) {
             config.put(CommonConfigurationKeys.MODULE_NAME, "main")
             jdkHome?.let {config.setupJdk(it) }
             config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, JavaSourceRoot(tmpDir.toFile(), ""))
-            val kotlinSourceRoot = try {
-                kotlinSourceRoot1521(tmpDir.toAbsolutePath().toString(), false)
-            } catch (e: NoSuchMethodError) {
-                kotlinSourceRoot190(tmpDir.toAbsolutePath().toString(), false)
-            }
-            config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, kotlinSourceRoot)
+            config.add<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, KotlinSourceRoot(tmpDir.toAbsolutePath().toString(), false, null))
             config.addAll<ContentRoot>(CLIConfigurationKeys.CONTENT_ROOTS, classpath!!.map { JvmClasspathRoot(File(it)) })
             config.put<MessageCollector>(CLIConfigurationKeys.MESSAGE_COLLECTOR_KEY, PrintingMessageCollector(System.err, MessageRenderer.GRADLE_STYLE, verboseCompilerMessages))
 
@@ -105,7 +105,7 @@ class Transformer(private val map: MappingSet) {
             val rootArea = Extensions.getRootArea()
             synchronized(rootArea) {
                 if (!rootArea.hasExtensionPoint(CustomExceptionHandler.KEY)) {
-                    rootArea.registerExtensionPoint(CustomExceptionHandler.KEY.name, CustomExceptionHandler::class.java.name, ExtensionPoint.Kind.INTERFACE)
+                    rootArea.registerExtensionPoint(CustomExceptionHandler.KEY.name, CustomExceptionHandler::class.java.name, ExtensionPoint.Kind.INTERFACE, true)
                 }
             }
 
@@ -116,15 +116,7 @@ class Transformer(private val map: MappingSet) {
             val psiFiles = virtualFiles.mapValues { psiManager.findFile(it.value)!! }
             val ktFiles = psiFiles.values.filterIsInstance<KtFile>()
 
-            val analysis = try {
-                analyze1521(environment, ktFiles)
-            } catch (e: NoSuchMethodError) {
-                try {
-                    analyze1620(environment, ktFiles)
-                } catch (e: NoSuchMethodError) {
-                    analyze200(environment, ktFiles)
-                }
-            }
+            val analysis = analyze(environment, ktFiles)
 
             val remappedEnv = remappedClasspath?.let {
                 setupRemappedProject(disposable, it, processedTmpDir)
@@ -202,16 +194,18 @@ class Transformer(private val map: MappingSet) {
             config,
             EnvironmentConfigFiles.JVM_CONFIG_FILES
         )
-        try {
-            analyze1521(environment, emptyList())
-        } catch (e: NoSuchMethodError) {
-            try {
-                analyze1620(environment, emptyList())
-            } catch (e: NoSuchMethodError) {
-                analyze200(environment, emptyList())
-            }
-        }
+        analyze(environment, emptyList())
         return environment
+    }
+
+    private fun analyze(environment: KotlinCoreEnvironment, ktFiles: List<KtFile>): AnalysisResult {
+        return TopDownAnalyzerFacadeForJVM.analyzeFilesWithJavaIntegration(
+            environment.project,
+            ktFiles,
+            NoScopeRecordCliBindingTrace(environment.project),
+            environment.configuration,
+            { scope: GlobalSearchScope -> environment.createPackagePartProvider(scope) }
+        )
     }
 
     companion object {
