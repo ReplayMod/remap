@@ -1,26 +1,30 @@
 package com.replaymod.gradle.remap
 
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
-import org.jetbrains.kotlin.cli.jvm.config.javaSourceRoots
-import org.jetbrains.kotlin.cli.jvm.config.jvmClasspathRoots
 import org.jetbrains.kotlin.com.intellij.lang.jvm.JvmModifier
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.StandardFileSystems
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
 import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFileManager
 import org.jetbrains.kotlin.com.intellij.psi.PsiClass
 import org.jetbrains.kotlin.com.intellij.psi.PsiJavaFile
 import org.jetbrains.kotlin.com.intellij.psi.PsiManager
-import org.jetbrains.kotlin.config.JVMConfigurationKeys
+import java.io.File
+import java.nio.file.Path
 
-class ShortNameIndex(private val environment: KotlinCoreEnvironment) {
-    private val psiManager = PsiManager.getInstance(environment.project)
+class ShortNameIndex(
+    project: Project,
+    jdkHome: File?,
+    classpath: List<File>,
+    sourceRoots: List<Path>,
+) {
+    private val psiManager = PsiManager.getInstance(project)
 
     private val entries: Map<String, ShortNameEntry> = mutableMapOf<String, ShortNameEntry>().apply {
         val localFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.FILE_PROTOCOL)
         val jarFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JAR_PROTOCOL)
         val jrtFileSystem = VirtualFileManager.getInstance().getFileSystem(StandardFileSystems.JRT_PROTOCOL)
 
-        val classpathRoots = environment.configuration.jvmClasspathRoots.mapNotNull { file ->
+        val classpathRoots = classpath.mapNotNull { file ->
             if (file.isFile) {
                 jarFileSystem.findFileByPath("${file.absolutePath}!/")
             } else {
@@ -28,11 +32,10 @@ class ShortNameIndex(private val environment: KotlinCoreEnvironment) {
             }
         }
 
-        val jdkHome = environment.configuration[JVMConfigurationKeys.JDK_HOME]
         val allModuleRoots = jrtFileSystem.findFileByPath("$jdkHome!/modules")?.children ?: emptyArray()
         val javaModuleRoots = allModuleRoots.filter { it.name.startsWith("java.") }
 
-        val sourcesRoots = environment.configuration.javaSourceRoots.mapNotNull { localFileSystem.findFileByPath(it) }
+        val sourcesRoots = sourceRoots.mapNotNull { localFileSystem.findFileByPath(it.toAbsolutePath().toString()) }
 
         fun index(file: VirtualFile, pkgPrefix: String) {
             if (file.isDirectory) {

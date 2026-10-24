@@ -1,13 +1,14 @@
 package com.replaymod.gradle.remap
 
-import org.jetbrains.kotlin.cli.jvm.compiler.KotlinCoreEnvironment
+import org.jetbrains.kotlin.com.intellij.openapi.project.Project
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 
-internal class AutoImports(private val environment: KotlinCoreEnvironment) {
-
-    private val shortClassNames = ShortNameIndex(environment)
+internal class AutoImports(
+    private val project: Project,
+    private val shortClassNames: ShortNameIndex,
+) {
 
     fun apply(originalFile: PsiFile, mappedFile: String, processedFile: String): String =
         apply(originalFile, originalFile.text.lines(), mappedFile.lines(), processedFile.lines())
@@ -31,7 +32,7 @@ internal class AutoImports(private val environment: KotlinCoreEnvironment) {
         }
         val inputText = inputLines.joinToString("\n")
 
-        val psiFileFactory = PsiFileFactory.getInstance(environment.project)
+        val psiFileFactory = PsiFileFactory.getInstance(project)
         val psiFile =
             psiFileFactory.createFileFromText(originalFile.language, inputText) as? PsiJavaFile ?: return inputText
         val pkg = psiFile.packageStatement?.packageReference?.resolve() as? PsiPackage

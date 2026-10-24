@@ -139,7 +139,13 @@ class Transformer(private val map: MappingSet) {
             }
 
             val autoImports = if (manageImports && remappedEnv != null) {
-                AutoImports(remappedEnv)
+                val shortNameIndex = ShortNameIndex(
+                    remappedEnv.project,
+                    remappedJdkHome ?: jdkHome,
+                    remappedClasspath!!.map { File(it) },
+                    listOf(processedTmpDir),
+                )
+                AutoImports(remappedEnv.project, shortNameIndex)
             } else {
                 null
             }
