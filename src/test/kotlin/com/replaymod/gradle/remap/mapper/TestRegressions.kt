@@ -7,6 +7,20 @@ import org.junit.jupiter.api.Test
 
 class TestRegressions {
     @Test
+    fun `custom exception handler extension point must be registered`() {
+        // Code which does method resolution which taken into account checked exceptions requires that
+        // the CustomExceptionHandler extension point is registered, which it doesn't seem to be by default.
+        TestData.remap("""
+            class test {
+                <T> void on(java.util.List<T> list, T fun) {}
+                java.util.List<java.io.Closeable> i = null;
+                { on(i, this::f); }
+                void f() throws java.io.IOException {}
+            }
+        """.trimIndent())
+    }
+
+    @Test
     fun `readAsm must not try to read source-only files`() {
         TestData.transformer.remap(mapOf(
             "TestMixin.java" to """

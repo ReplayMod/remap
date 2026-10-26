@@ -1,21 +1,31 @@
+@file:OptIn(KaExperimentalApi::class)
+
 package com.replaymod.gradle.remap
 
+import com.intellij.lang.ASTNode
+import com.intellij.lang.jvm.JvmModifier
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.psi.*
+import com.intellij.psi.util.ClassUtil
 import com.replaymod.gradle.remap.PsiUtils.getSignature
 import net.fabricmc.mappingio.tree.MappingTreeView
 import net.fabricmc.mappingio.tree.MappingTreeView.ClassMappingView
 import net.fabricmc.mappingio.tree.MappingTreeView.FieldMappingView
 import net.fabricmc.mappingio.tree.MappingTreeView.MethodMappingView
-import org.jetbrains.kotlin.asJava.getRepresentativeLightMethod
-import org.jetbrains.kotlin.com.intellij.lang.ASTNode
-import org.jetbrains.kotlin.com.intellij.lang.jvm.JvmModifier
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
-import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
-import org.jetbrains.kotlin.com.intellij.psi.*
-import org.jetbrains.kotlin.com.intellij.psi.util.ClassUtil
-import org.jetbrains.kotlin.descriptors.CallableMemberDescriptor
-import org.jetbrains.kotlin.descriptors.FunctionDescriptor
-import org.jetbrains.kotlin.js.resolve.diagnostics.findPsi
+import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.javaInterop.javaMethodName
+import org.jetbrains.kotlin.analysis.api.javaInterop.mapToJvmTypeDescriptor
+import org.jetbrains.kotlin.analysis.api.javaInterop.namedClassSymbol
+import org.jetbrains.kotlin.analysis.api.resolution.resolveSuccessfulSymbol
+import org.jetbrains.kotlin.analysis.api.resolution.resolveSuccessfulSymbols
+import org.jetbrains.kotlin.analysis.api.symbols.*
+import org.jetbrains.kotlin.analysis.api.symbols.KaClassLikeSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.markers.KaAnnotatedSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.markers.KaNamedSymbol
+import org.jetbrains.kotlin.analysis.api.types.*
 import org.jetbrains.kotlin.lexer.KtTokens
 import org.jetbrains.kotlin.load.java.propertyNameByGetMethodName
 import org.jetbrains.kotlin.load.java.propertyNameBySetMethodName
@@ -25,24 +35,17 @@ import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.getNonStrictParentOfType
-import org.jetbrains.kotlin.psi.psiUtil.getParentOfType
+import org.jetbrains.kotlin.psi.psiUtil.quoteIfNeeded
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
-import org.jetbrains.kotlin.psi.synthetics.findClassDescriptor
-import org.jetbrains.kotlin.resolve.BindingContext
-import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameOrNull
-import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperclassesWithoutAny
-import org.jetbrains.kotlin.resolve.descriptorUtil.overriddenTreeAsSequence
-import org.jetbrains.kotlin.resolve.sam.SamConstructorDescriptor
-import org.jetbrains.kotlin.synthetic.SyntheticJavaPropertyDescriptor
 import org.objectweb.asm.Opcodes
 import org.objectweb.asm.tree.ClassNode
 import java.util.*
+import kotlin.collections.mutableSetOf
 
 internal class PsiMapper(
         private val mappingTree: MappingTreeView,
         private val remappedProject: Project?,
         private val file: PsiFile,
-        private val bindingContext: BindingContext,
         private val changes: Changes,
 ) {
     private val aliased = mutableSetOf<String>()
@@ -57,6 +60,42 @@ internal class PsiMapper(
             }
             child = child.nextSibling
         }
+    }
+
+    context(_: KaSession, _: MixinContext)
+    private fun mapField(expr: PsiElement, field: KaNamedSymbol) {
+        val fieldName = field.name
+        val mapped = findFieldMapping(field)?.dstName
+        if (mapped == null || mapped == fieldName.asString()) return
+        replaceIdentifier(expr, mapped)
+
+        if (expr is PsiJavaCodeReferenceElement
+            && !expr.isQualified // qualified access is fine
+            && !isSwitchCase(expr) // referencing constants in case statements is fine
+        ) {
+            changes.error(expr, "Implicit member reference to remapped field \"$fieldName\". " +
+                    "This can cause issues if the remapped reference becomes shadowed by a local variable and is therefore forbidden. " +
+                    "Use \"this.$fieldName\" instead.")
+        }
+    }
+
+    context(_: KaSession, mixinContext: MixinContext)
+    private fun findFieldMapping(field: KaNamedSymbol): FieldMappingView? {
+        val declaringClass = field.containingSymbol as KaClassSymbol
+        var classId = declaringClass.classId ?: return null
+
+        val mixinTargetClass = if (mixinContext.isMixinClass(classId)) mixinContext.targetClass else null
+        // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
+        if (mixinTargetClass != null) {
+            // but only if the field conceptually belongs to the target class
+            if (field !is KaAnnotatedSymbol || !field.annotations.contains(ClassId.topLevel(FqName(CLASS_SHADOW)))) {
+                return null // otherwise, it belongs to the mixin and never gets remapped
+            }
+
+            classId = mixinTargetClass.classId!!
+        }
+
+        return mappingTree.getClass(classId)?.getField(field.name.asString(), null)
     }
 
     context(_: MixinContext)
@@ -85,7 +124,7 @@ internal class PsiMapper(
         // If this field is declared in a mixin class, we want to consider the hierarchy of the target instead
         if (mixinTargetClass != null) {
             // but only if the field conceptually belongs to the target class
-            if (field.getAnnotation(CLASS_SHADOW) == null) {
+            if (!field.hasAnnotation(CLASS_SHADOW)) {
                 return null // otherwise, it belongs to the mixin and never gets remapped
             }
 
@@ -95,23 +134,17 @@ internal class PsiMapper(
         return mappingTree.getClass(classId)?.getField(field.name, null)
     }
 
-    context(_: MixinContext)
-    private fun mapMethod(expr: PsiElement, method: PsiMethod) {
-        if (method.isConstructor) {
-            if (expr is KtSimpleNameExpression) {
-                map(expr, method.containingClass ?: return)
-            }
-            return
-        }
-
-        val mapping = findMapping(method)
+    context(_: KaSession, _: MixinContext)
+    private fun mapFunction(expr: PsiElement, symbol: KaNamedFunctionSymbol) {
+        val mapping = findMethodMapping(symbol)
         val mapped = mapping?.dstName
-        if (mapped != null && mapped != method.name) {
+        if (mapped != null && mapped != symbol.name.toString()) {
             val maybeGetter = propertyNameByGetMethodName(Name.identifier(mapped))
             if (maybeGetter != null // must have getter-style name
-                    && !method.hasParameters() // getters cannot take any arguments
-                    && method.returnType != PsiType.VOID // and must return some value
-                    && !method.hasModifier(JvmModifier.STATIC) // synthetic properties cannot be static
+                    && expr.parent is KtCallExpression // must be in the context of a call (as opposed to definition)
+                    && symbol.valueParameters.isEmpty() // getters cannot take any arguments
+                    && symbol.returnType != builtinTypes.unit // and must return some value
+                    && !symbol.isStatic // synthetic properties cannot be static
                     // `super.getDebugInfo()` is a special case which cannot be replaced with a synthetic property
                     && expr.parent.parent.let { it !is KtDotQualifiedExpression || it.firstChild !is KtSuperExpression }
                     // cannot use synthetic properties if there is a field of the same name
@@ -129,7 +162,7 @@ internal class PsiMapper(
             val parent = expr.parent
             if (parent is KtCallExpression) {
                 val argumentList = parent.valueArgumentList
-                val maybeSetter = getSyntheticPropertyForSetter(expr, method, mapping)
+                val maybeSetter = getSyntheticPropertyForSetter(expr, symbol, mapping)
                 if (maybeSetter != null && argumentList != null) {
                     val leftParen = argumentList.leftParenthesis!!
                     val rightParen = argumentList.rightParenthesis!!
@@ -146,12 +179,26 @@ internal class PsiMapper(
         }
     }
 
-    private fun getSyntheticPropertyForSetter(expr: PsiElement, method: PsiMethod, mapping: MethodMappingView): String? {
+    context(_: MixinContext)
+    private fun mapMethod(expr: PsiElement, method: PsiMethod) {
+        if (method.isConstructor) {
+            return
+        }
+
+        val mapping = findMapping(method)
+        val mapped = mapping?.dstName
+        if (mapped != null && mapped != method.name) {
+            replaceIdentifier(expr, mapped)
+        }
+    }
+
+    context(_: KaSession)
+    private fun getSyntheticPropertyForSetter(expr: PsiElement, method: KaNamedFunctionSymbol, mapping: MethodMappingView): String? {
         // Check if the setter method qualifies for synthetic property conversion
-        if (method.returnType != PsiType.VOID) return null
-        if (method.hasModifier(JvmModifier.STATIC)) return null
-        val parameter = method.parameterList.parameters.singleOrNull() ?: return null
-        val type = ClassUtil.getBinaryPresentation(parameter.type)
+        if (method.returnType != builtinTypes.unit) return null
+        if (method.isStatic) return null
+        val parameter = method.valueParameters.singleOrNull() ?: return null
+        val type = parameter.returnType.mapToJvmTypeDescriptor()
 
         // `super.setDebugInfo(value)` is a special case which cannot be replaced with a synthetic property
         if (expr.parent.parent.let { it is KtDotQualifiedExpression && it.firstChild is KtSuperExpression }) {
@@ -184,17 +231,8 @@ internal class PsiMapper(
     private fun getterNameByPropertyName(propertyName: String, withIsPrefix: Boolean): String =
         if (withIsPrefix) propertyName else "get" + propertyName.replaceFirstChar { it.uppercaseChar() }
 
-    context(mixinContext: MixinContext)
-    private fun mapKtNamedFunction(expr: PsiElement, method: KtNamedFunction) {
-        val psiMethod = method.getRepresentativeLightMethod()
-        val mapped = findMapping(psiMethod ?: return)?.dstName
-        if (mapped != null && mapped != method.name) {
-            replaceIdentifier(expr, mapped)
-        }
-    }
-
-    context(mixinContext: MixinContext)
-    private fun mapSyntheticJavaProperty(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
+    context(_: KaSession, _: MixinContext)
+    private fun mapSyntheticJavaProperty(expr: PsiElement, property: KaSyntheticJavaPropertySymbol) {
         val assignment = findAssignment(expr)
         if (assignment != null) {
             mapSetter(expr, assignment, property)
@@ -218,15 +256,12 @@ internal class PsiMapper(
         return assignment
     }
 
-    private fun FunctionDescriptor.findPsiInHierarchy() =
-        overriddenTreeAsSequence(false).firstNotNullOfOrNull { it.findPsi() } as? PsiMethod
-
-    context(mixinContext: MixinContext)
-    private fun mapGetter(expr: PsiElement, property: SyntheticJavaPropertyDescriptor) {
-        val getter = property.getMethod.findPsiInHierarchy() ?: return
-        val mapping = findMapping(getter)
+    context(_: KaSession, mixinContext: MixinContext)
+    private fun mapGetter(expr: PsiElement, property: KaSyntheticJavaPropertySymbol) {
+        val getter = property.javaGetterSymbol
+        val mapping = findMethodMapping(getter)
         val mappedGetter = mapping?.dstName ?: return
-        if (mappedGetter != getter.name) {
+        if (mappedGetter != getter.name.asString()) {
             val maybeMapped = propertyNameByGetMethodName(Name.identifier(mappedGetter))
             if (maybeMapped == null || isSyntheticPropertyShadowedByField(maybeMapped.identifier, mapping, expr)) {
                 // Can happen if a method is a synthetic property in the current mapping (e.g. `isNonBoss`) but not
@@ -240,17 +275,17 @@ internal class PsiMapper(
         }
     }
 
-    context(mixinContext: MixinContext)
-    private fun mapSetter(expr: PsiElement, assignment: KtBinaryExpression, property: SyntheticJavaPropertyDescriptor) {
-        val getter = property.getMethod.findPsiInHierarchy() ?: return
-        val setter = property.setMethod?.findPsiInHierarchy() ?: return
-        val mappingGetter = findMapping(getter)
-        val mappingSetter = findMapping(setter)
+    context(_: KaSession, mixinContext: MixinContext)
+    private fun mapSetter(expr: PsiElement, assignment: KtBinaryExpression, property: KaSyntheticJavaPropertySymbol) {
+        val getter = property.javaGetterSymbol
+        val setter = property.javaSetterSymbol ?: return
+        val mappingGetter = findMethodMapping(getter)
+        val mappingSetter = findMethodMapping(setter)
         val mappedGetter = mappingGetter?.dstName // if getter is gone, we need to switch to method invocation
         val mappedSetter = mappingSetter?.dstName ?: return
-        if (mappedGetter == null || mappedSetter != setter.name) {
+        if (mappedGetter == null || mappedSetter != setter.name.asString()) {
             val maybeMapped = if (mappedGetter != null) {
-                val isBooleanField = mappingGetter.srcDesc!!.endsWith("Z")
+                val isBooleanField = mappingGetter.srcDesc?.endsWith("Z") == true
                 val withIsPrefix = isBooleanField && mappedGetter.startsWith("is")
                 val propertyByGetter = propertyNameByGetMethodName(Name.identifier(mappedGetter))
                 val propertyBySetter = propertyNameBySetMethodName(Name.identifier(mappedSetter), withIsPrefix)
@@ -278,15 +313,72 @@ internal class PsiMapper(
         }
     }
 
-    // See caller for why this exists
-    context(mixinContext: MixinContext)
-    private fun mapFunctionDescriptor(expr: PsiElement, method: FunctionDescriptor) {
-        for (overriddenDescriptor in method.overriddenDescriptors) {
-            val overriddenPsi = overriddenDescriptor.findPsi()
-            if (overriddenPsi != null) {
-                map(expr, overriddenPsi) // found a psi element, continue as usually
-            } else {
-                mapFunctionDescriptor(expr, overriddenDescriptor) // recursion
+    context(_: KaSession, mixinContext: MixinContext)
+    private fun findMethodMapping(method: KaNamedFunctionSymbol): MethodMappingView? {
+        var declaringClass: KaClassSymbol?
+        declaringClass = method.containingDeclaration as? KaClassSymbol ?: return null
+        val parentQueue = ArrayDeque<KaClassSymbol>()
+        parentQueue.offer(declaringClass)
+
+        val mixinTargetClass = if (mixinContext.isMixinClass(declaringClass)) mixinContext.targetClass else null
+        // If this method is declared in a mixin class, we want to consider the hierarchy of the target as well
+        if (mixinTargetClass != null) {
+            parentQueue.offer(mixinTargetClass.namedClassSymbol!!)
+            // but only if the method conceptually belongs to the target class
+            val isShadow = method.annotations.contains(ClassId.topLevel(FqName(CLASS_SHADOW)))
+            val isOverwrite = method.annotations.contains(ClassId.topLevel(FqName(CLASS_OVERWRITE)))
+            val isOverride = method.annotations.contains(ClassId.topLevel(FqName(CLASS_OVERRIDE)))
+            if (!isShadow && !isOverwrite && !isOverride) {
+                return null // otherwise, it belongs to the mixin and never gets remapped
+            }
+        }
+
+        val signatures = mutableSetOf<MethodSignature>()
+        signatures.add(getSignature(method))
+        // If the method overrides a method with generic parameters or return type, we need to look for the signature
+        // of the overridden method as well.
+        // E.g. the overridden method may accept a generic `T` (where `T` is generic at the class level, with `T : Any`)
+        // and as such has `java/lang/Object` in its signature, while the overriding class may specify `T` as `MyObject`
+        // and therefore its overriding method is specialized to accept MyObj and as such has `MyObj` in its signature
+        // (and Java would generate a bridge method to do the actual overriding, but we don't see that one here).
+        method.allOverriddenSymbols.flatMapTo(signatures) { sym ->
+            when (sym) {
+                is KaNamedFunctionSymbol -> listOf(getSignature(sym))
+                is KaKotlinPropertySymbol -> {
+                    val name = method.name.asString()
+                    val getter = sym.getter
+                    val setter = sym.setter
+                    listOfNotNull(
+                        if (getter != null && getter.javaMethodName == method.name.asString()) getSignature(name, getter) else null,
+                        if (setter != null && setter.javaMethodName == method.name.asString()) getSignature(name, setter) else null,
+                    )
+                }
+                else -> throw UnsupportedOperationException("$sym")
+            }
+        }
+
+        if (signatures.isEmpty()) {
+            return null
+        }
+
+        var mapping: ClassMappingView? = null
+        while (true) {
+            if (mapping != null) {
+                val mapped = signatures.firstNotNullOfOrNull { mapping.getMethod(it.name, it.desc) }
+                if (mapped != null) {
+                    return mapped
+                }
+                mapping = null
+            }
+            while (mapping == null) {
+                declaringClass = parentQueue.poll()
+                if (declaringClass == null) return null
+
+                for (superType in declaringClass.superTypes) {
+                    parentQueue.offer(superType.symbol as? KaNamedClassSymbol ?: continue)
+                }
+
+                mapping = mappingTree.getClass(declaringClass.classId ?: continue)
             }
         }
     }
@@ -328,7 +420,7 @@ internal class PsiMapper(
         var mapping: ClassMappingView? = null
         while (true) {
             if (mapping != null) {
-                val mapped = signatures.firstNotNullOfOrNull { mapping!!.getMethod(it.name, it.desc) }
+                val mapped = signatures.firstNotNullOfOrNull { mapping.getMethod(it.name, it.desc) }
                 if (mapped != null) {
                     return mapped
                 }
@@ -374,17 +466,6 @@ internal class PsiMapper(
                 parentQueue.offer(anInterface)
             }
         }
-    }
-
-    private fun mapKtClassOrObject(expr: PsiElement, resolved: KtClassOrObject) {
-        val classes = generateSequence(resolved) { it.getParentOfType<KtClassOrObject>(true) }.toMutableList()
-        classes.reverse()
-        val classId = ClassId(
-            FqName(resolved.containingKtFile.packageFqName.asString()),
-            FqName(classes.joinToString("$") { it.name!! }),
-            false,
-        )
-        mapClassLike(expr, classId)
     }
 
     private fun mapClassLike(expr: PsiElement, classId: ClassId) {
@@ -447,37 +528,71 @@ internal class PsiMapper(
         when (resolved) {
             is PsiField -> mapField(expr, resolved)
             is PsiMethod -> mapMethod(expr, resolved)
-            is KtNamedFunction -> mapMethod(expr, resolved.getRepresentativeLightMethod() ?: return)
             is PsiClass -> mapClassLike(expr, resolved.classId ?: return)
-            is KtClassOrObject -> mapKtClassOrObject(expr, resolved)
         }
     }
 
-    context(mixinContext: MixinContext)
+    context(_: MixinContext)
     private fun findMappedName(element: PsiElement): String? {
         return when (element) {
             is PsiField -> findMapping(element)?.dstName
             is PsiMethod -> findMapping(element)?.dstName
-            is KtNamedFunction -> findMappedName(element.getRepresentativeLightMethod() ?: return null)
             else -> null
         }
     }
 
+    context(_: KaSession, _: MixinContext)
+    private fun map(expr: PsiElement, symbol: KaSymbol) {
+        when (symbol) {
+            is KaPackageSymbol -> {}
+            is KaClassLikeSymbol -> mapClassLike(expr, symbol.classId ?: return)
+            is KaConstructorSymbol -> mapClassLike(expr, (symbol.containingSymbol as KaClassLikeSymbol).classId ?: return)
+            is KaSamConstructorSymbol -> if (symbol.returnType.abbreviation == null) mapClassLike(expr, symbol.functionalInterface.classId ?: return)
+            is KaNamedFunctionSymbol -> mapFunction(expr, symbol)
+            is KaSyntheticJavaPropertySymbol -> mapSyntheticJavaProperty(expr, symbol)
+            is KaKotlinPropertySymbol -> {}
+            is KaJavaFieldSymbol -> mapField(expr, symbol)
+            is KaEnumEntrySymbol -> mapField(expr, symbol)
+            is KaParameterSymbol -> {}
+            is KaTypeParameterSymbol -> {}
+            is KaLocalVariableSymbol -> {}
+            is KaAnonymousFunctionSymbol -> {}
+            is KaBackingFieldSymbol -> {}
+            else -> throw UnsupportedOperationException("$symbol at `${expr.text.quoteIfNeeded()}`")
+        }
+    }
+
+    context(_: KaSession, _: MixinContext)
+    private fun findMappedName(symbol: KaSymbol): String? {
+        return when (symbol) {
+            is KaPackageSymbol -> null
+            is KaClassLikeSymbol -> null
+            is KaConstructorSymbol -> null
+            is KaNamedFunctionSymbol -> findMethodMapping(symbol)?.dstName
+            is KaSyntheticJavaPropertySymbol -> null
+            is KaKotlinPropertySymbol -> null
+            is KaJavaFieldSymbol -> findFieldMapping(symbol)?.dstName
+            is KaEnumEntrySymbol -> findFieldMapping(symbol)?.dstName
+            is KaParameterSymbol -> null
+            is KaTypeParameterSymbol -> null
+            is KaLocalVariableSymbol -> null
+            is KaAnonymousFunctionSymbol -> null
+            is KaBackingFieldSymbol -> null
+            else -> throw UnsupportedOperationException("$symbol")
+        }
+    }
+
+    context(_: KaSession)
     private fun isSyntheticPropertyShadowedByField(propertyName: String, mapping: MethodMappingView, expr: PsiElement): Boolean {
         val cls = findPsiClass(mapping.owner.dstClassId, remappedProject ?: file.project) ?: return false
         val field = cls.findFieldByName(propertyName, true) ?: return false
 
-        val canAccessProtected = expr.getNonStrictParentOfType<KtClassOrObject>()?.extends(
-            mapping.owner.srcName.replace('/', '.')
-        ) == true
+        val exprClass = expr.getNonStrictParentOfType<KtClassOrObject>()?.classSymbol
+        val fieldClass = mapping.owner.srcClassId
+        val canAccessProtected = exprClass != null && exprClass.defaultType.isSubtypeOf(fieldClass)
 
         return field.hasModifier(JvmModifier.PUBLIC) || (canAccessProtected && field.hasModifier(JvmModifier.PROTECTED))
     }
-
-    private fun KtClassOrObject.extends(className: String): Boolean =
-        findClassDescriptor(bindingContext)
-            .getAllSuperclassesWithoutAny()
-            .any { it.fqNameOrNull()?.asString() == className }
 
     // Note: Supports only Mixins with a single target (ignores others)
     private fun mapMixinTarget(annotation: PsiAnnotation): Pair<PsiClass, PsiElement>? {
@@ -796,20 +911,8 @@ internal class PsiMapper(
             })
         }
     }
-    private val allDirectKtReferences by lazy {
-        buildSet {
-            file.accept(object : KtTreeVisitor<Void?>() {
-                override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
-                    val target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
-                    if (target != null) {
-                        add(target)
-                    }
-                    return super.visitReferenceExpression(expression, data)
-                }
-            })
-        }
-    }
 
+    context(_: KaSession)
     fun remapFile() {
         if (file is KtFile) {
             // FIXME we don't currently support Kotlin mixins
@@ -931,7 +1034,7 @@ internal class PsiMapper(
         })
     }
 
-    context(_: MixinContext)
+    context(_: KaSession, _: MixinContext)
     private fun remapKtFile() {
         require(file is KtFile)
 
@@ -942,10 +1045,24 @@ internal class PsiMapper(
             }
         }
 
+        val allDirectKtReferences by lazy {
+            buildSet {
+                file.accept(object : KtTreeVisitor<Void?>() {
+                    override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
+                        val symbol = expression.resolveSuccessfulSymbol()
+                        if (symbol != null) {
+                            add(symbol)
+                        }
+                        return super.visitReferenceExpression(expression, data)
+                    }
+                })
+            }
+        }
+
         file.accept(object : KtTreeVisitor<Void>() {
             override fun visitNamedFunction(function: KtNamedFunction, data: Void?): Void? {
                 if (changes.isUnchanged(function)) {
-                    mapKtNamedFunction(function, function)
+                    map(function, function.symbol)
                 }
                 return super.visitNamedFunction(function, data)
             }
@@ -970,42 +1087,26 @@ internal class PsiMapper(
 
             override fun visitReferenceExpression(expression: KtReferenceExpression, data: Void?): Void? {
                 if (changes.isUnchanged(expression)) {
-                    var target = bindingContext[BindingContext.REFERENCE_TARGET, expression]
-                    if (target == null) {
-                        val possibleTargets = bindingContext[BindingContext.AMBIGUOUS_REFERENCE_TARGET, expression]
-                        if (possibleTargets != null && !possibleTargets.isEmpty()) {
+                    var symbol = expression.resolveSuccessfulSymbol()
+                    if (symbol == null) {
+                        val possibleTargets = expression.resolveSuccessfulSymbols()
+                        if (!possibleTargets.isEmpty()) {
                             val usedTargets = possibleTargets.filter { it in allDirectKtReferences }
-                            val targets = usedTargets.mapNotNull { descriptor ->
-                                val psi = descriptor.findPsi() ?: return@mapNotNull null
-                                val mapped = findMappedName(psi) ?: return@mapNotNull null
-                                Pair(descriptor, mapped)
+                            val targets = usedTargets.mapNotNull { symbol ->
+                                val mapped = findMappedName(symbol) ?: return@mapNotNull null
+                                Pair(symbol, mapped)
                             }
                             val mappedNames = targets.mapTo(mutableSetOf()) { it.second }
                             if (mappedNames.size > 1) {
                                 changes.error(expression, "\"${expression.text}\" is ambiguous and remaps to " +
                                         "multiple different names: " + mappedNames.joinToString { "\"${it}\"" })
                             } else if (mappedNames.size == 1) {
-                                target = targets.first().first
+                                symbol = targets.first().first
                             }
                         }
                     }
-                    if (target is SyntheticJavaPropertyDescriptor) {
-                        mapSyntheticJavaProperty(expression, target)
-                    } else if (target != null
-                        && ((target as? CallableMemberDescriptor)?.kind != CallableMemberDescriptor.Kind.SYNTHESIZED
-                                || target is SamConstructorDescriptor)) {
-                        val targetPsi = target.findPsi()
-                        if (targetPsi != null) {
-                            map(expression, targetPsi)
-                        } else if (target is FunctionDescriptor) {
-                            // Appears to be the case if we're referencing an overwritten function in a previously
-                            // compiled kotlin file
-                            // E.g. A.f overwrites B.f overwrites C.f
-                            //      C is a Minecraft class, B is a previously compiled (and already remapped) kotlin
-                            //      class and we're currently in A.f trying to call `super.f()`.
-                            //      `target` is a DeserializedSimpleFunctionDescriptor with no linked PSI element.
-                            mapFunctionDescriptor(expression, target)
-                        }
+                    if (symbol != null) {
+                        map(expression, symbol)
                     }
                 }
                 return super.visitReferenceExpression(expression, data)
@@ -1041,6 +1142,7 @@ private class MixinContext(
 ) {
     private val mixinClassId = mixinClass?.classId
 
+    fun isMixinClass(symbol: KaClassSymbol) = symbol.classId.let { it != null && isMixinClass(it) }
     fun isMixinClass(classId: ClassId) = mixinClassId == classId
 
     companion object {

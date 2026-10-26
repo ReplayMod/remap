@@ -1,8 +1,8 @@
 package com.replaymod.gradle.remap
 
+import com.intellij.openapi.util.text.StringUtil.offsetToLineNumber
+import com.intellij.psi.*
 import com.replaymod.gradle.remap.PsiPattern.Matcher
-import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil.offsetToLineNumber
-import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 

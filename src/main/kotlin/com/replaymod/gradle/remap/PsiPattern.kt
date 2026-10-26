@@ -1,7 +1,7 @@
 package com.replaymod.gradle.remap
 
-import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
-import org.jetbrains.kotlin.com.intellij.psi.*
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
 import org.jetbrains.kotlin.psi.psiUtil.startOffset
 

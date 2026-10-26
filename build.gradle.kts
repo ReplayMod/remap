@@ -20,7 +20,12 @@ val testA = sourceSets.create("testA")
 val testB = sourceSets.create("testB")
 
 dependencies {
-    api("org.jetbrains.kotlin:kotlin-compiler-embeddable:2.0.0")
+    implementation("org.jetbrains.kotlin:kotlin-analysis-api:2.5.0-Beta2")
+
+    // TODO should ideally get rid of these, but we've got a few things we still need from them
+    implementation("org.jetbrains.kotlin:kotlin-analysis-api-implementation:2.5.0-Beta2")
+    implementation("org.jetbrains.kotlin:kotlin-analysis-api-intellij-implementation-components:2.5.0-Beta2")
+
     implementation(kotlin("stdlib"))
     implementation("org.ow2.asm:asm-tree:9.9.1")
     implementation("net.fabricmc:mapping-io:0.6.1")

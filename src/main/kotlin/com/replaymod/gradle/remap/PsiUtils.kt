@@ -1,15 +1,31 @@
 package com.replaymod.gradle.remap
 
-import org.jetbrains.kotlin.com.intellij.openapi.project.Project
-import org.jetbrains.kotlin.com.intellij.openapi.util.Key
-import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil
-import org.jetbrains.kotlin.com.intellij.openapi.vfs.VirtualFile
-import org.jetbrains.kotlin.com.intellij.psi.*
-import org.jetbrains.kotlin.com.intellij.psi.impl.compiled.ClsClassImpl
-import org.jetbrains.kotlin.com.intellij.psi.impl.java.stubs.JavaStubElementTypes
-import org.jetbrains.kotlin.com.intellij.psi.search.GlobalSearchScope
-import org.jetbrains.kotlin.com.intellij.psi.util.ClassUtil
-import org.jetbrains.kotlin.com.intellij.psi.util.PsiTreeUtil
+import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Key
+import com.intellij.openapi.util.text.StringUtil
+import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.psi.JavaPsiFacade
+import com.intellij.psi.PsiAnnotationMemberValue
+import com.intellij.psi.PsiArrayInitializerMemberValue
+import com.intellij.psi.PsiClass
+import com.intellij.psi.PsiElement
+import com.intellij.psi.PsiField
+import com.intellij.psi.PsiLiteralExpression
+import com.intellij.psi.PsiMethod
+import com.intellij.psi.PsiNameValuePair
+import com.intellij.psi.PsiReferenceExpression
+import com.intellij.psi.impl.compiled.ClsClassImpl
+import com.intellij.psi.impl.java.stubs.JavaStubElementTypes
+import com.intellij.psi.search.GlobalSearchScope
+import com.intellij.psi.util.ClassUtil
+import com.intellij.psi.util.PsiTreeUtil
+import org.jetbrains.kotlin.analysis.api.KaExperimentalApi
+import org.jetbrains.kotlin.analysis.api.KaSession
+import org.jetbrains.kotlin.analysis.api.javaInterop.mapToJvmTypeDescriptor
+import org.jetbrains.kotlin.analysis.api.symbols.KaFunctionSymbol
+import org.jetbrains.kotlin.analysis.api.symbols.KaNamedFunctionSymbol
+import org.jetbrains.kotlin.analysis.api.types.builtinTypes
+import org.jetbrains.kotlin.analysis.api.types.varargArrayType
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.name.Name
@@ -67,7 +83,7 @@ internal fun findPsiClass(classId: ClassId, project: Project): PsiClass? {
         cls = (cls as ClsClassImpl).stub
             .childrenStubs
             .firstNotNullOfOrNull { stub ->
-                if (stub.stubType != JavaStubElementTypes.CLASS) return@firstNotNullOfOrNull null
+                if (stub.elementType != JavaStubElementTypes.CLASS) return@firstNotNullOfOrNull null
                 val psi = stub.psi as PsiClass
                 if (psi.name != name.asString()) return@firstNotNullOfOrNull null
                 psi
@@ -153,6 +169,25 @@ internal fun VirtualFile.readAsmTree(): ClassNode? {
 data class MethodSignature(val name: String, val desc: String)
 
 internal object PsiUtils {
+    context(_: KaSession)
+    fun getSignature(function: KaNamedFunctionSymbol): MethodSignature =
+        getSignature(function.name.asString(), function)
+
+    @OptIn(KaExperimentalApi::class)
+    context(_: KaSession)
+    fun getSignature(name: String, function: KaFunctionSymbol): MethodSignature {
+        val descriptor = buildString {
+            append('(')
+            function.valueParameters.forEach { param ->
+                val type = param.varargArrayType ?: param.returnType
+                append(type.mapToJvmTypeDescriptor())
+            }
+            append(')')
+            append(if (function.returnType == builtinTypes.unit) "V" else function.returnType.mapToJvmTypeDescriptor())
+        }
+        return MethodSignature(name, descriptor)
+    }
+
     fun getSignature(method: PsiMethod): MethodSignature {
         return MethodSignature(method.name, ClassUtil.getAsmMethodSignature(method))
     }
