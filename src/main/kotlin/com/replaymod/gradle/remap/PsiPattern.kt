@@ -1,6 +1,5 @@
 package com.replaymod.gradle.remap
 
-import org.jetbrains.kotlin.backend.common.push
 import org.jetbrains.kotlin.com.intellij.openapi.util.TextRange
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -59,10 +58,10 @@ internal class PsiPattern(
                     // comma we'd otherwise have if there are other leading arguments in the call.
                     replacement = replacement.removeSuffix(", ")
                 }
-                changes.push(Pair(TextRange(start, argPsi.startOffset), replacement))
+                changes.add(Pair(TextRange(start, argPsi.startOffset), replacement))
                 start = argPsi.endOffset
             }
-            changes.push(Pair(TextRange(start, root.endOffset), replacementIter.next()))
+            changes.add(Pair(TextRange(start, root.endOffset), replacementIter.next()))
 
             return changes.filterNot { it.first.isEmpty && it.second.isEmpty() }
         }

@@ -1,7 +1,6 @@
 package com.replaymod.gradle.remap
 
 import com.replaymod.gradle.remap.PsiPattern.Matcher
-import org.jetbrains.kotlin.backend.common.push
 import org.jetbrains.kotlin.com.intellij.openapi.util.text.StringUtil.offsetToLineNumber
 import org.jetbrains.kotlin.com.intellij.psi.*
 import org.jetbrains.kotlin.psi.psiUtil.endOffset
@@ -66,10 +65,10 @@ internal class PsiPatterns(private val annotationFQN: String) {
             val sortedArgs = arguments.toList().sortedBy { it.startOffset }
             var start = replacementExpression.startOffset
             for (argPsi in sortedArgs) {
-                replacement.push(replacementFile.slice(start until argPsi.startOffset))
+                replacement.add(replacementFile.slice(start until argPsi.startOffset))
                 start = argPsi.endOffset
             }
-            replacement.push(replacementFile.slice(start until replacementExpression.endOffset))
+            replacement.add(replacementFile.slice(start until replacementExpression.endOffset))
         }
 
         val replacementCanBeAssigned = replacementExpression is PsiReferenceExpression
