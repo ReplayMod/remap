@@ -338,4 +338,25 @@ class TestMixinInjections {
             }
         """.trimIndent()
     }
+
+    @Test
+    fun `remaps @Definition`() {
+        TestData.remap("""
+            import com.llamalad7.mixinextras.expression.Definition;
+            @org.spongepowered.asm.mixin.Mixin(a.pkg.A.class)
+            class MixinA {
+                @Definition(id = "aMethod", method = "La/pkg/A;aMethod()V")
+                @Definition(id = "a", field = "La/pkg/A;a:La/pkg/A;")
+                private void test1() {}
+            }
+        """.trimIndent()) shouldBe """
+            import com.llamalad7.mixinextras.expression.Definition;
+            @org.spongepowered.asm.mixin.Mixin(b.pkg.B.class)
+            class MixinA {
+                @Definition(id = "aMethod", method = "Lb/pkg/B;bMethod()V")
+                @Definition(id = "a", field = "Lb/pkg/B;b:Lb/pkg/B;")
+                private void test1() {}
+            }
+        """.trimIndent()
+    }
 }

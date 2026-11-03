@@ -664,7 +664,10 @@ internal class PsiMapper(
 
     context(_: MixinContext)
     private fun mapMixinMethodTarget(method: PsiMethod) {
-        val methodAttrib = method.annotations.firstNotNullOfOrNull { it.findDeclaredAttributeValue("method") }
+        val methodAttrib = method.annotations.firstNotNullOfOrNull { annotation ->
+            if (annotation.qualifiedName == CLASS_MIXIN_EXTRAS_DEFINITION) return@firstNotNullOfOrNull null
+            annotation.findDeclaredAttributeValue("method")
+        }
         for ((literalExpr, literalValue) in methodAttrib?.resolvedLiteralValues ?: emptyList()) {
             mapMixinMethodTarget(literalExpr, literalValue)
         }
@@ -898,6 +901,22 @@ internal class PsiMapper(
         }
     }
 
+    context(_: MixinContext)
+    private fun remapMixinExtrasDefinition(annotation: PsiAnnotation) {
+        for (attribute in annotation.parameterList.attributes) {
+            when (attribute.name) {
+                "field", "method" -> {
+                    val (value, signature) = attribute.resolvedLiteralValue ?: continue
+                    val newSignature = remapMixinTarget(signature)
+                    if (newSignature != signature && changes.isUnchanged(value)) {
+                        changes.replace(value, "\"$newSignature\"")
+                    }
+                }
+                else -> {}
+            }
+        }
+    }
+
     private val allDirectJavaReferences by lazy {
         buildSet {
             file.accept(object : JavaRecursiveElementVisitor() {
@@ -966,9 +985,10 @@ internal class PsiMapper(
 
             override fun visitAnnotation(annotation: PsiAnnotation) {
                 val name = annotation.qualifiedName
-                if (name == CLASS_AT) {
-                    context(mixinContext) {
-                        remapAtTarget(annotation)
+                context(mixinContext) {
+                    when (name) {
+                        CLASS_AT -> remapAtTarget(annotation)
+                        CLASS_MIXIN_EXTRAS_DEFINITION -> remapMixinExtrasDefinition(annotation)
                     }
                 }
                 super.visitAnnotation(annotation)
@@ -1121,6 +1141,7 @@ internal class PsiMapper(
         private const val CLASS_ACCESSOR = "org.spongepowered.asm.mixin.gen.Accessor"
         private const val CLASS_INVOKER = "org.spongepowered.asm.mixin.gen.Invoker"
         private const val CLASS_AT = "org.spongepowered.asm.mixin.injection.At"
+        private const val CLASS_MIXIN_EXTRAS_DEFINITION = "com.llamalad7.mixinextras.expression.Definition"
         private const val CLASS_OVERRIDE = "java.lang.Override"
 
         private fun isSwitchCase(e: PsiElement): Boolean {

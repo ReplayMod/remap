@@ -39,11 +39,13 @@ object TestData {
         jdkHome = File(System.getProperty("java.home"))
         classpath = arrayOf(
             findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
+            findClasspathEntry("com.llamalad7.mixinextras.expression.Definition"),
             findClasspathEntry("a.pkg.A"),
             findClasspathEntry("AMarkerKt"),
         )
         remappedClasspath = arrayOf(
             findClasspathEntry("org.spongepowered.asm.mixin.Mixin"),
+            findClasspathEntry("com.llamalad7.mixinextras.expression.Definition"),
             findClasspathEntry("b.pkg.B"),
             findClasspathEntry("BMarkerKt"),
         )

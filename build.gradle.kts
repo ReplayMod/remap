@@ -38,6 +38,7 @@ dependencies {
     testRuntimeOnly(testA.output)
     testRuntimeOnly(testB.output)
     testRuntimeOnly("org.spongepowered:mixin:0.8.4")
+    testRuntimeOnly("io.github.llamalad7:mixinextras-common:0.5.5")
 }
 
 tasks.named<Jar>("jar") {
